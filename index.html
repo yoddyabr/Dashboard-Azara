@@ -60,6 +60,10 @@
     <a href="#" onclick="switchViewMobile('data-guru')" id="nav-data-guru"><i class="fas fa-chalkboard-teacher"></i> <span>Data Guru</span></a>
     <a href="#" onclick="switchViewMobile('honor-guru')" id="nav-honor-guru"><i class="fas fa-money-bill-wave"></i> <span>Honor Guru</span></a>
     <a href="#" onclick="switchViewMobile('schedule')" id="nav-schedule"><i class="fas fa-calendar-alt"></i> <span>Schedule</span></a>
+    <div class="sidebar-category-title">Master Data</div>
+    <div class="sidebar-divider"></div>
+    <a href="#" onclick="switchViewMobile('data-mapel')" id="nav-data-mapel"><i class="fas fa-book-open"></i> <span>Mata Pelajaran</span></a>
+    <a href="#" onclick="switchViewMobile('data-ruangan')" id="nav-data-ruangan"><i class="fas fa-door-open"></i> <span>Data Ruangan</span></a>
   </div>
 
   <!-- MAIN CONTENT -->
@@ -361,6 +365,53 @@
       </div>
     </div>
 
+
+    <!-- ===== SECTION: DATA MATA PELAJARAN ===== -->
+    <div id="section-data-mapel" class="view-section">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold m-0" style="color:#0f172a;letter-spacing:-0.75px;">Data Mata Pelajaran</h3>
+        <button class="btn btn-primary fw-bold px-3 py-2" onclick="bukaModalTambahMapel()" style="border-radius:10px;">
+          <i class="fas fa-plus me-2"></i>Tambah Mata Pelajaran
+        </button>
+      </div>
+      <div class="bento-card">
+        <div class="row g-2">
+          <div class="col-12 col-md-6"><input type="text" class="form-control" id="fmMapel" placeholder="Cari Mata Pelajaran..." oninput="resetMapelPageAndFilter()"></div>
+          <div class="col-12 col-md-6"><select class="form-select" id="fmKelas" onchange="resetMapelPageAndFilter()"><option value="">Semua Kelas</option></select></div>
+        </div>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+        <div id="infoMapelCount" class="small text-muted fw-bold"></div>
+      </div>
+      <div class="bento-card p-2 p-md-4" style="overflow-x:auto;">
+        <table class="table table-sm table-striped align-middle small m-0" style="min-width:400px;">
+          <thead class="table-dark"><tr><th>Mata Pelajaran</th><th>Kelas</th><th class="text-center">Aksi</th></tr></thead>
+          <tbody id="tabelMapelBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrapper mb-4">
+        <button class="btn btn-sm btn-outline-secondary px-3" id="btnPrevMapel" onclick="pindahHalamanMapel(-1)" style="border-radius:8px;"><i class="fas fa-chevron-left me-1"></i>Prev</button>
+        <span class="small fw-bold text-dark" id="txtPageMapel">Halaman 1</span>
+        <button class="btn btn-sm btn-outline-secondary px-3" id="btnNextMapel" onclick="pindahHalamanMapel(1)" style="border-radius:8px;">Next <i class="fas fa-chevron-right ms-1"></i></button>
+      </div>
+    </div>
+
+    <!-- ===== SECTION: DATA RUANGAN ===== -->
+    <div id="section-data-ruangan" class="view-section">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold m-0" style="color:#0f172a;letter-spacing:-0.75px;">Data Ruangan</h3>
+        <button class="btn btn-primary fw-bold px-3 py-2" onclick="bukaModalTambahRuanganMaster()" style="border-radius:10px;">
+          <i class="fas fa-plus me-2"></i>Tambah Ruangan
+        </button>
+      </div>
+      <div class="bento-card p-2 p-md-4" style="overflow-x:auto;">
+        <table class="table table-sm table-striped align-middle small m-0" style="min-width:350px;">
+          <thead class="table-dark"><tr><th>Nama Ruangan</th><th class="text-center">Kapasitas</th><th class="text-center">Aksi</th></tr></thead>
+          <tbody id="tabelRuanganBody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div><!-- end main-content -->
 
   <!-- ===== MODAL: INPUT PEMBAYARAN ===== -->
@@ -493,7 +544,8 @@
             <!-- Mata Pelajaran -->
             <div class="mb-3">
               <label class="small fw-bold text-muted mb-1">Mata Pelajaran</label>
-              <input type="text" class="form-control" id="gMapel" placeholder="Contoh: Matematika" required>
+              <input list="gMapelOptions" type="text" class="form-control" id="gMapel" placeholder="Pilih atau ketik mata pelajaran..." required>
+              <datalist id="gMapelOptions"></datalist>
             </div>
 
             <!-- Kelas: checkboxes grouped by jenjang -->
@@ -523,7 +575,7 @@
         <div class="modal-body p-4">
           <form id="formHonor" onsubmit="event.preventDefault();">
             <input type="hidden" id="hRowIndexHidden">
-            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Mata Pelajaran</label><input type="text" class="form-control" id="hMapel" placeholder="Contoh: Matematika" required></div>
+            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Mata Pelajaran</label><input list="hMapelOptions" type="text" class="form-control" id="hMapel" placeholder="Pilih atau ketik mata pelajaran..." required><datalist id="hMapelOptions"></datalist></div>
             <div class="mb-3">
               <label class="small fw-bold text-muted mb-1">Kelas</label>
               <select class="form-select" id="hKelas" required><option value="">-- Pilih Kelas --</option></select>
@@ -557,10 +609,10 @@
             </div>
             <div class="row">
               <div class="col-6 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Durasi</label><input type="text" class="form-control bg-light" id="sDurasi" readonly placeholder="Otomatis"></div>
-              <div class="col-6 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Ruangan</label><input type="text" class="form-control" id="sRuangan" placeholder="Contoh: R-01"></div>
+              <div class="col-6 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Ruangan</label><input list="sRuanganOptions" type="text" class="form-control" id="sRuangan" placeholder="Pilih atau ketik ruangan..."><datalist id="sRuanganOptions"></datalist></div>
               <div class="col-12 col-md-4 mb-3">
                 <label class="small fw-bold text-muted mb-1">Kelas</label>
-                <select class="form-select" id="sKelas" required onchange="autoFillHonorSesi()"><option value="">-- Pilih Kelas --</option></select>
+                <select class="form-select" id="sKelas" required onchange="onScheduleKelasChange()"><option value="">-- Pilih Kelas --</option></select>
               </div>
             </div>
             <div class="row">
@@ -629,7 +681,7 @@
       </div>
       <!-- Kelas -->
       <div class="mb-2">
-        <select class="form-select form-select-sm" id="qpKelas" style="border-radius:8px;">
+        <select class="form-select form-select-sm" id="qpKelas" onchange="onQpKelasChange()" style="border-radius:8px;">
           <option value="">-- Pilih Kelas --</option>
         </select>
       </div>
@@ -680,6 +732,55 @@
   <!-- Overlay untuk tutup popup -->
   <div id="calPopupOverlay" onclick="tutupQuickPopup()"
        style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;"></div>
+
+  <!-- ===== MODAL: FORM MATA PELAJARAN ===== -->
+  <div class="modal fade" id="modalMasterMapel" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius:16px;border:none;box-shadow:0 20px 25px -5px rgb(0 0 0/0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <h5 id="txtJudulFormMapel" class="fw-bold text-dark m-0">Tambah Mata Pelajaran</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="resetFormMapelKeDefault()"></button>
+        </div>
+        <div class="modal-body p-4">
+          <form id="formMapel" onsubmit="event.preventDefault();">
+            <input type="hidden" id="mpRowIndexHidden">
+            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Nama Mata Pelajaran</label><input type="text" class="form-control" id="mpNama" placeholder="Contoh: Matematika" required></div>
+            <div class="mb-3">
+              <label class="small fw-bold text-muted mb-1">Kelas</label>
+              <select class="form-select" id="mpKelas" required><option value="">-- Pilih Kelas --</option></select>
+            </div>
+            <div class="d-flex gap-2 mt-4">
+              <button type="button" class="btn btn-light w-50 fw-bold py-2" data-bs-dismiss="modal" onclick="resetFormMapelKeDefault()" style="border-radius:10px;">Batal</button>
+              <button type="button" onclick="submitMapel()" id="btnSimpanMapel" class="btn btn-primary w-100 fw-bold py-2" style="border-radius:10px;">Simpan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: FORM RUANGAN MASTER ===== -->
+  <div class="modal fade" id="modalMasterRuangan" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius:16px;border:none;box-shadow:0 20px 25px -5px rgb(0 0 0/0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <h5 id="txtJudulFormRuanganMaster" class="fw-bold text-dark m-0">Tambah Ruangan</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="resetFormRuanganMasterKeDefault()"></button>
+        </div>
+        <div class="modal-body p-4">
+          <form id="formRuanganMaster" onsubmit="event.preventDefault();">
+            <input type="hidden" id="rmRowIndexHidden">
+            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Nama Ruangan</label><input type="text" class="form-control" id="rmNama" placeholder="Contoh: R-01" required></div>
+            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Kapasitas (orang)</label><input type="number" class="form-control" id="rmKapasitas" placeholder="Contoh: 20" min="0"></div>
+            <div class="d-flex gap-2 mt-4">
+              <button type="button" class="btn btn-light w-50 fw-bold py-2" data-bs-dismiss="modal" onclick="resetFormRuanganMasterKeDefault()" style="border-radius:10px;">Batal</button>
+              <button type="button" onclick="submitRuanganMaster()" id="btnSimpanRuanganMaster" class="btn btn-primary w-100 fw-bold py-2" style="border-radius:10px;">Simpan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ===== MODAL: KELOLA RUANGAN ===== -->
   <div class="modal fade" id="modalRuangan" tabindex="-1" aria-hidden="true">

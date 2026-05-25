@@ -131,12 +131,18 @@ function switchView(viewName) {
   }
   if (viewName === 'schedule') {
     if (!guruDataLoaded) fetchGuruData();
+    if (!masterDataLoaded) fetchMasterData();
     if (!scheduleDataLoaded) {
-      fetchScheduleData(); // fetchScheduleData sudah memanggil renderCalendar di dalamnya
+      fetchScheduleData();
     } else {
-      renderCalendar();   // data sudah ada, langsung render ulang kalender
+      renderCalendar();
     }
   }
+  if ((viewName === 'data-mapel' || viewName === 'data-ruangan') && !masterDataLoaded) {
+    fetchMasterData();
+  }
+  if (viewName === 'data-mapel' && masterDataLoaded) { applyFiltersMapel(); }
+  if (viewName === 'data-ruangan' && masterDataLoaded) { renderTabelRuanganMaster(); }
 }
 function switchViewMobile(viewName) {
   switchView(viewName);
@@ -1391,5 +1397,285 @@ function eksekusiNaikKelas() {
 // ==========================================
 // INIT — fetch hanya sekali saat pertama load
 // ==========================================
-window.onload = function() { fetchData(); };
+// ==========================================
+// MASTER DATA: STATE + FETCH
+// ==========================================
+let rawMapel        = [];   // { rowIndex, mapel, kelas }
+let rawRuangan      = [];   // { rowIndex, ruangan, kapasitas }
+let masterDataLoaded = false;
+let filteredMapelData = [];
+let currentPageMapel  = 1;
+let bsModalMasterMapel   = null;
+let bsModalMasterRuangan = null;
+
+function fetchMasterData(callback) {
+  google.script.run
+    .withSuccessHandler(function(data) {
+      rawMapel    = data.mapelList    || [];
+      rawRuangan  = data.ruanganList  || [];
+      masterDataLoaded = true;
+      updateMasterDataLists();
+      // Sync calendarRooms dari master ruangan
+      if (rawRuangan.length > 0) {
+        let masterRooms = rawRuangan.map(r => r.ruangan);
+        masterRooms.forEach(r => { if (!calendarRooms.includes(r)) calendarRooms.push(r); });
+      }
+      if (callback) callback();
+    })
+    .withFailureHandler(function(err) {
+      tampilkanToast('❌ Error master data: ' + err.message, 'error');
+    })
+    .getMasterData();
+}
+
+// Update semua datalist & select yang butuh mapel/ruangan
+function updateMasterDataLists() {
+  // ── DATALIST MAPEL ──
+  // Unique mapel names (tanpa duplikat)
+  let uniqueMapel = [...new Set(rawMapel.map(m => m.mapel))];
+  let mapelOpts   = uniqueMapel.map(m => `<option value="${m}">`).join('');
+  ['sMapelOptions','qpMapelOptions','hMapelOptions','gMapelOptions'].forEach(id => {
+    let el = document.getElementById(id); if (el) el.innerHTML = mapelOpts;
+  });
+
+  // ── DATALIST RUANGAN ──
+  let ruanganOpts = rawRuangan.map(r => `<option value="${r.ruangan}">`).join('');
+  ['sRuanganOptions','qpRuanganOptions'].forEach(id => {
+    let el = document.getElementById(id); if (el) el.innerHTML = ruanganOpts;
+  });
+
+  // ── Filter kelas di section Data Mata Pelajaran ──
+  let kelasSet = [...new Set(rawMapel.map(m => m.kelas).filter(Boolean))].sort();
+  let fmKelas  = document.getElementById('fmKelas');
+  if (fmKelas) {
+    fmKelas.innerHTML = '<option value="">Semua Kelas</option>' +
+      kelasSet.map(k => `<option value="${k}">${k}</option>`).join('');
+  }
+
+  // ── Render tabel ──
+  if (document.getElementById('tabelMapelBody'))   { applyFiltersMapel(); }
+  if (document.getElementById('tabelRuanganBody')) { renderTabelRuanganMaster(); }
+}
+
+// Filter mapel by kelas yang dipilih (untuk schedule & popup form)
+function getMapelByKelas(kelas) {
+  if (!kelas) return [...new Set(rawMapel.map(m => m.mapel))];
+  return rawMapel.filter(m => m.kelas === kelas).map(m => m.mapel);
+}
+
+function onScheduleKelasChange() {
+  let kelas   = document.getElementById('sKelas').value;
+  let mapels  = getMapelByKelas(kelas);
+  let el      = document.getElementById('sMapelOptions');
+  if (el) el.innerHTML = mapels.map(m => `<option value="${m}">`).join('');
+  autoFillHonorSesi();
+}
+
+function onQpKelasChange() {
+  let kelas  = document.getElementById('qpKelas').value;
+  let mapels = getMapelByKelas(kelas);
+  let el     = document.getElementById('qpMapelOptions');
+  if (el) el.innerHTML = mapels.map(m => `<option value="${m}">`).join('');
+  cekKonflikQuickPopup();
+}
+
+// ==========================================
+// TABEL MATA PELAJARAN
+// ==========================================
+function resetMapelPageAndFilter() { currentPageMapel = 1; applyFiltersMapel(); }
+function pindahHalamanMapel(arah)  { currentPageMapel += arah; renderTabelMapel(); }
+
+function applyFiltersMapel() {
+  let fMapel = (document.getElementById('fmMapel')?.value || '').toLowerCase();
+  let fKelas = document.getElementById('fmKelas')?.value || '';
+  filteredMapelData = rawMapel.filter(m =>
+    (m.mapel||'').toLowerCase().includes(fMapel) &&
+    (fKelas === '' || m.kelas === fKelas)
+  );
+  renderTabelMapel();
+}
+
+function renderTabelMapel() {
+  let limit    = 50;
+  let total    = filteredMapelData.length;
+  let pages    = Math.ceil(total / limit) || 1;
+  if (currentPageMapel < 1) currentPageMapel = 1;
+  if (currentPageMapel > pages) currentPageMapel = pages;
+  let start = (currentPageMapel - 1) * limit;
+  let end   = Math.min(start + limit, total);
+
+  document.getElementById('btnPrevMapel').disabled = (currentPageMapel === 1);
+  document.getElementById('btnNextMapel').disabled = (currentPageMapel === pages);
+  document.getElementById('txtPageMapel').innerText = `Halaman ${currentPageMapel} dari ${pages}`;
+  document.getElementById('infoMapelCount').innerText = `${total} mata pelajaran`;
+
+  let html = '';
+  filteredMapelData.slice(start, end).forEach(m => {
+    html += `<tr>
+      <td><strong>${m.mapel}</strong></td>
+      <td><span class="badge bg-secondary">${m.kelas}</span></td>
+      <td class="text-center">
+        <div class="d-flex gap-1 justify-content-center">
+          <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditMapel(${m.rowIndex})"><i class="fas fa-edit me-1"></i>Edit</button>
+          <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusMapel(${m.rowIndex},'${m.mapel.replace(/'/g,"\'")} (${m.kelas})')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
+        </div>
+      </td>
+    </tr>`;
+  });
+  document.getElementById('tabelMapelBody').innerHTML =
+    html || '<tr><td colspan="3" class="text-center text-muted py-4">Belum ada data mata pelajaran</td></tr>';
+}
+
+// ── Modal Mata Pelajaran ──
+function initModalMasterMapel() {
+  if (!bsModalMasterMapel) bsModalMasterMapel = new bootstrap.Modal(document.getElementById('modalMasterMapel'));
+}
+function bukaModalTambahMapel() {
+  resetFormMapelKeDefault();
+  populateKelasSelect('mpKelas');
+  initModalMasterMapel();
+  bsModalMasterMapel.show();
+}
+function siapkanEditMapel(rowIndex) {
+  let m = rawMapel.find(x => x.rowIndex === rowIndex); if (!m) return;
+  document.getElementById('mpRowIndexHidden').value = m.rowIndex;
+  document.getElementById('mpNama').value            = m.mapel;
+  populateKelasSelect('mpKelas');
+  document.getElementById('mpKelas').value = m.kelas;
+  document.getElementById('txtJudulFormMapel').innerText = `Edit Mata Pelajaran`;
+  document.getElementById('btnSimpanMapel').innerText    = 'Update';
+  document.getElementById('btnSimpanMapel').className    = 'btn btn-warning w-100 fw-bold py-2';
+  initModalMasterMapel();
+  bsModalMasterMapel.show();
+}
+function resetFormMapelKeDefault() {
+  document.getElementById('formMapel').reset();
+  document.getElementById('mpRowIndexHidden').value = '';
+  document.getElementById('txtJudulFormMapel').innerText = 'Tambah Mata Pelajaran';
+  document.getElementById('btnSimpanMapel').innerText    = 'Simpan';
+  document.getElementById('btnSimpanMapel').className    = 'btn btn-primary w-100 fw-bold py-2';
+}
+function submitMapel() {
+  let payload = {
+    rowIndex: document.getElementById('mpRowIndexHidden').value,
+    mapel   : document.getElementById('mpNama').value.trim(),
+    kelas   : document.getElementById('mpKelas').value
+  };
+  if (!payload.mapel || !payload.kelas) { tampilkanToast('Lengkapi semua field!','warning'); return; }
+  setTombolLoading('btnSimpanMapel', true, 'Menyimpan...');
+  tampilkanLoading('Menyimpan...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanMapel', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
+      let tipe = res.includes('✅') ? 'success' : 'warning';
+      tampilkanToast(res, tipe);
+      if (tipe === 'success') { bsModalMasterMapel.hide(); resetFormMapelKeDefault(); masterDataLoaded = false; fetchMasterData(); }
+    })
+    .withFailureHandler(err => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanMapel', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
+      tampilkanToast('❌ '+err.message, 'error');
+    })
+    .simpanMapel(payload);
+}
+function konfirmasiHapusMapel(rowIndex, label) {
+  if (!confirm(`Hapus "${label}"?`)) return;
+  tampilkanLoading('Menghapus...');
+  google.script.run
+    .withSuccessHandler(res => { sembunyikanLoading(); tampilkanToast(res,'success'); masterDataLoaded=false; fetchMasterData(); })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('❌ '+err.message,'error'); })
+    .hapusMapel(rowIndex);
+}
+
+// ==========================================
+// TABEL RUANGAN MASTER
+// ==========================================
+function renderTabelRuanganMaster() {
+  let html = '';
+  rawRuangan.forEach(r => {
+    html += `<tr>
+      <td><strong>${r.ruangan}</strong></td>
+      <td class="text-center">${r.kapasitas > 0 ? r.kapasitas + ' orang' : '-'}</td>
+      <td class="text-center">
+        <div class="d-flex gap-1 justify-content-center">
+          <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditRuanganMaster(${r.rowIndex})"><i class="fas fa-edit me-1"></i>Edit</button>
+          <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusRuanganMaster(${r.rowIndex},'${r.ruangan.replace(/'/g,"\'")}')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
+        </div>
+      </td>
+    </tr>`;
+  });
+  document.getElementById('tabelRuanganBody').innerHTML =
+    html || '<tr><td colspan="3" class="text-center text-muted py-4">Belum ada data ruangan</td></tr>';
+}
+
+// ── Modal Ruangan Master ──
+function initModalMasterRuangan() {
+  if (!bsModalMasterRuangan) bsModalMasterRuangan = new bootstrap.Modal(document.getElementById('modalMasterRuangan'));
+}
+function bukaModalTambahRuanganMaster() {
+  resetFormRuanganMasterKeDefault();
+  initModalMasterRuangan();
+  bsModalMasterRuangan.show();
+}
+function siapkanEditRuanganMaster(rowIndex) {
+  let r = rawRuangan.find(x => x.rowIndex === rowIndex); if (!r) return;
+  document.getElementById('rmRowIndexHidden').value = r.rowIndex;
+  document.getElementById('rmNama').value            = r.ruangan;
+  document.getElementById('rmKapasitas').value       = r.kapasitas || '';
+  document.getElementById('txtJudulFormRuanganMaster').innerText = `Edit Ruangan (${r.ruangan})`;
+  document.getElementById('btnSimpanRuanganMaster').innerText    = 'Update';
+  document.getElementById('btnSimpanRuanganMaster').className    = 'btn btn-warning w-100 fw-bold py-2';
+  initModalMasterRuangan();
+  bsModalMasterRuangan.show();
+}
+function resetFormRuanganMasterKeDefault() {
+  document.getElementById('formRuanganMaster').reset();
+  document.getElementById('rmRowIndexHidden').value = '';
+  document.getElementById('txtJudulFormRuanganMaster').innerText = 'Tambah Ruangan';
+  document.getElementById('btnSimpanRuanganMaster').innerText    = 'Simpan';
+  document.getElementById('btnSimpanRuanganMaster').className    = 'btn btn-primary w-100 fw-bold py-2';
+}
+function submitRuanganMaster() {
+  let payload = {
+    rowIndex : document.getElementById('rmRowIndexHidden').value,
+    ruangan  : document.getElementById('rmNama').value.trim(),
+    kapasitas: document.getElementById('rmKapasitas').value
+  };
+  if (!payload.ruangan) { tampilkanToast('Nama ruangan tidak boleh kosong!','warning'); return; }
+  setTombolLoading('btnSimpanRuanganMaster', true, 'Menyimpan...');
+  tampilkanLoading('Menyimpan...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanRuanganMaster', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
+      let tipe = res.includes('✅') ? 'success' : 'warning';
+      tampilkanToast(res, tipe);
+      if (tipe === 'success') {
+        bsModalMasterRuangan.hide();
+        resetFormRuanganMasterKeDefault();
+        masterDataLoaded = false;
+        fetchMasterData();
+      }
+    })
+    .withFailureHandler(err => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanRuanganMaster', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
+      tampilkanToast('❌ '+err.message, 'error');
+    })
+    .simpanRuanganMaster(payload);
+}
+function konfirmasiHapusRuanganMaster(rowIndex, nama) {
+  if (!confirm(`Hapus ruangan "${nama}"?`)) return;
+  tampilkanLoading('Menghapus...');
+  google.script.run
+    .withSuccessHandler(res => { sembunyikanLoading(); tampilkanToast(res,'success'); masterDataLoaded=false; fetchMasterData(); })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('❌ '+err.message,'error'); })
+    .hapusRuanganMaster(rowIndex);
+}
+
+window.onload = function() {
+  fetchData();
+  fetchMasterData();
+};
 </script>
