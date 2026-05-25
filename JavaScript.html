@@ -1158,54 +1158,51 @@ function simpanQuickPopup() {
   let isRecurring = document.getElementById('qpRecurring').checked;
   let untilDate   = document.getElementById('qpUntilDate').value;
 
-  if (!kelas)   { tampilkanToast('Pilih kelas!', 'warning');           return; }
-  if (!mapel)   { tampilkanToast('Isi mata pelajaran!', 'warning');    return; }
-  if (!idGuru)  { tampilkanToast('Pilih guru!', 'warning');            return; }
-  if (!ruangan) { tampilkanToast('Isi nama ruangan!', 'warning');      return; }
+  if (!kelas)   { tampilkanToast('Pilih kelas!', 'warning');                    return; }
+  if (!mapel)   { tampilkanToast('Isi mata pelajaran!', 'warning');             return; }
+  if (!idGuru)  { tampilkanToast('Pilih guru!', 'warning');                     return; }
+  if (!ruangan) { tampilkanToast('Isi nama ruangan!', 'warning');               return; }
   if (!mulai || !akhir) { tampilkanToast('Isi jam mulai & berakhir!','warning'); return; }
   if (isRecurring && !untilDate) { tampilkanToast('Isi tanggal akhir pengulangan!','warning'); return; }
 
-  // Kumpulkan semua tanggal yang akan disimpan
   let dates = isRecurring
     ? getRecurringDates(calPreviewInfo.dateStr, untilDate)
     : [calPreviewInfo.dateStr];
 
   if (dates.length === 0) { tampilkanToast('Tidak ada tanggal valid!', 'warning'); return; }
 
-  // Cek konflik di semua tanggal
+  // Cek semua konflik
   let allKonflik = [];
-  dates.forEach(ds => {
+  dates.forEach(function(ds) {
     let k = cekKonflik(ruangan, ds, mulai, akhir, null);
     if (k.length > 0) allKonflik.push({ date: ds, items: k });
   });
 
   if (allKonflik.length > 0) {
-    let info = allKonflik.slice(0,3).map(k =>
-      `${new Date(k.date+'T12:00:00').toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'})}: ${k.items.map(i=>i.mapel).join(', ')}`
-    ).join('
-') + (allKonflik.length > 3 ? `
-...dan ${allKonflik.length-3} lainnya` : '');
-    if (!confirm(`⚠️ Konflik jadwal di ${ruangan}!
-
-${info}
-
-Lanjutkan? Jadwal lama akan digantikan.`)) return;
+    let infoLines = allKonflik.slice(0,3).map(function(k) {
+      let tgl = new Date(k.date + 'T12:00:00').toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'});
+      let nm  = k.items.map(function(i){ return i.mapel; }).join(', ');
+      return tgl + ': ' + nm;
+    });
+    if (allKonflik.length > 3) infoLines.push('...dan ' + (allKonflik.length - 3) + ' lainnya');
+    let infoText = infoLines.join('\n');
+    let msg = '\u26a0\ufe0f Konflik jadwal di ' + ruangan + '!\n\n' + infoText + '\n\nLanjutkan? Jadwal lama akan digantikan.';
+    if (!confirm(msg)) return;
   }
 
   let btn = document.getElementById('qpSaveBtn');
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${dates.length > 1 ? '0/'+dates.length : ''}`;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
 
-  // Simpan satu per satu secara rekursif
+  let konflikRows = allKonflik.map(function(k){ return k.items; }).flat().map(function(i){ return i.rowIndex; });
   let saved = 0, failed = 0;
-  let konflikRowsToDelete = allKonflik.flatMap(k => k.items.map(i => i.rowIndex));
 
   function hapusKonflikLalu(idx, onDone) {
-    if (idx >= konflikRowsToDelete.length) { onDone(); return; }
+    if (idx >= konflikRows.length) { onDone(); return; }
     google.script.run
-      .withSuccessHandler(() => { scheduleDataLoaded=false; hapusKonflikLalu(idx+1, onDone); })
-      .withFailureHandler(() => hapusKonflikLalu(idx+1, onDone))
-      .hapusSchedule(konflikRowsToDelete[idx]);
+      .withSuccessHandler(function() { scheduleDataLoaded = false; hapusKonflikLalu(idx + 1, onDone); })
+      .withFailureHandler(function() { hapusKonflikLalu(idx + 1, onDone); })
+      .hapusSchedule(konflikRows[idx]);
   }
 
   function simpanSatuPerSatu(idx) {
@@ -1215,33 +1212,30 @@ Lanjutkan? Jadwal lama akan digantikan.`)) return;
       if (ruangan && !calendarRooms.includes(ruangan)) calendarRooms.push(ruangan);
       tutupQuickPopup();
       tampilkanToast(
-        `✅ ${saved} jadwal berhasil disimpan${failed>0?' ('+failed+' gagal)':''}!`,
+        (saved > 0 ? '\u2705 ' + saved + ' jadwal berhasil disimpan' : '\u274c Gagal') +
+        (failed > 0 ? ' (' + failed + ' gagal)' : '') + '!',
         saved > 0 ? 'success' : 'error'
       );
       scheduleDataLoaded = false;
       fetchScheduleData();
       return;
     }
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${idx+1}/${dates.length}`;
-    let payload = {
-      rowIndex:'', tgl: dates[idx],
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (idx+1) + '/' + dates.length;
+    var payload = {
+      rowIndex: '', tgl: dates[idx],
       jamMulai: mulai, jamBerakhir: akhir,
       durasi: hitungDurasiStr(mulai, akhir),
-      ruangan, kelas, mapel, idGuru, namaGuru
+      ruangan: ruangan, kelas: kelas, mapel: mapel, idGuru: idGuru, namaGuru: namaGuru
     };
     google.script.run
-      .withSuccessHandler(res => { if (res.includes('✅')) saved++; else failed++; simpanSatuPerSatu(idx+1); })
-      .withFailureHandler(() => { failed++; simpanSatuPerSatu(idx+1); })
+      .withSuccessHandler(function(res) { if (res.includes('\u2705')) saved++; else failed++; simpanSatuPerSatu(idx + 1); })
+      .withFailureHandler(function()    { failed++; simpanSatuPerSatu(idx + 1); })
       .simpanSchedule(payload);
   }
 
-  // Hapus semua konflik dulu, baru simpan semua tanggal
-  hapusKonflikLalu(0, () => simpanSatuPerSatu(0));
+  hapusKonflikLalu(0, function() { simpanSatuPerSatu(0); });
 }
 
-// ==========================================
-// CONFLICT DETECTION
-// ==========================================
 function cekKonflik(ruangan, dateStr, jamMulai, jamBerakhir, excludeRowIndex) {
   if (!ruangan || !dateStr || !jamMulai || !jamBerakhir) return [];
   let [h1,m1] = jamMulai.split(':').map(Number);
@@ -1674,455 +1668,284 @@ function konfirmasiHapusRuanganMaster(rowIndex, nama) {
     .hapusRuanganMaster(rowIndex);
 }
 
+
 // ==========================================
-// FETCH SCHEDULE DATA (lazy)
+// MISSING FUNCTIONS — restored
 // ==========================================
-function fetchScheduleData(callback) {
-  tampilkanLoading("Mengambil data jadwal...");
-  google.script.run
-    .withSuccessHandler(function(data) {
-      sembunyikanLoading();
-      rawSchedule = data || [];
-      scheduleDataLoaded = true;
-      extractRoomsFromSchedule();
-      renderCalendar();
-      if (callback) callback();
-    })
-    .withFailureHandler(function(err) {
-      sembunyikanLoading();
-      tampilkanToast("❌ Error data jadwal: " + err.message, 'error');
-    })
-    .getScheduleData();
+
+// ── GURU CRUD ──
+function initModalGuru() {
+  if (!bsModalGuru) bsModalGuru = new bootstrap.Modal(document.getElementById('modalGuru'));
 }
-
-// ==========================================
-// GURU: DATALIST untuk dropdown di form schedule/honor
-// ==========================================
-function updateGuruDatalistOptions() {
-  // Unique daftar guru (ID + Nama) untuk datalist
-  let seen = {};
-  let uniqueGuru = [];
-  rawGuru.forEach(g => {
-    if (g.id && !seen[g.id]) { seen[g.id] = true; uniqueGuru.push(g); }
-  });
-  let opts = uniqueGuru.map(g => `<option value="${g.id} - ${g.nama}">`).join('');
-  ['sGuruOptions','qpGuruOptions'].forEach(id => {
-    let el = document.getElementById(id); if (el) el.innerHTML = opts;
-  });
-}
-
-// ==========================================
-// TABEL DATA GURU (filter + pagination + render)
-// ==========================================
-function resetGuruPageAndFilter() { currentPageGuru = 1; applyFiltersGuru(); }
-function pindahHalamanGuru(arah) { currentPageGuru += arah; renderTabelGuru(); }
-
-function applyFiltersGuru() {
-  let fId    = (document.getElementById('fgId')?.value    || '').toLowerCase();
-  let fNama  = (document.getElementById('fgNama')?.value  || '').toLowerCase();
-  let fMapel = (document.getElementById('fgMapel')?.value || '').toLowerCase();
-  filteredGuruData = rawGuru.filter(g =>
-    (g.id   ||'').toLowerCase().includes(fId)    &&
-    (g.nama ||'').toLowerCase().includes(fNama)  &&
-    (g.mapel||'').toLowerCase().includes(fMapel)
-  );
-  renderTabelGuru();
-}
-
-function renderTabelGuru() {
-  let limitEl = document.getElementById('limitGuru');
-  let limitVal = limitEl ? limitEl.value : '50';
-  let total = filteredGuruData.length;
-  let limit = (limitVal === 'all') ? Math.max(total, 1) : parseInt(limitVal);
-  let pages = Math.ceil(total / limit) || 1;
-  if (currentPageGuru < 1) currentPageGuru = 1;
-  if (currentPageGuru > pages) currentPageGuru = pages;
-  let start = (currentPageGuru - 1) * limit;
-  let end   = Math.min(start + limit, total);
-
-  let btnPrev = document.getElementById('btnPrevGuru');
-  let btnNext = document.getElementById('btnNextGuru');
-  if (btnPrev) btnPrev.disabled = (currentPageGuru === 1);
-  if (btnNext) btnNext.disabled = (currentPageGuru === pages);
-  let txtPage = document.getElementById('txtPageGuru');
-  if (txtPage) txtPage.innerText = `Halaman ${currentPageGuru} dari ${pages}`;
-  let infoCount = document.getElementById('infoGuruCount');
-  if (infoCount) infoCount.innerText = `${total} data guru`;
-
-  let html = '';
-  filteredGuruData.slice(start, end).forEach(g => {
-    html += `<tr>
-      <td><span class="siswa-id-badge">${g.id}</span></td>
-      <td><strong>${g.nama}</strong></td>
-      <td>${g.mapel}</td>
-      <td><span class="badge bg-secondary">${g.kelas || '-'}</span></td>
-      <td class="text-center">
-        <div class="d-flex gap-1 justify-content-center">
-          <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditGuru(${g.rowIndex})"><i class="fas fa-edit me-1"></i>Edit</button>
-          <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusGuru(${g.rowIndex},'${(g.nama||'').replace(/'/g,"\\'")}')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
-        </div>
-      </td>
-    </tr>`;
-  });
-  let body = document.getElementById('tabelGuruBody');
-  if (body) body.innerHTML = html || '<tr><td colspan="5" class="text-center text-muted py-4">Belum ada data guru</td></tr>';
-}
-
-// ==========================================
-// TABEL HONOR GURU
-// ==========================================
-function renderTabelHonor() {
-  let html = '';
-  rawHonor.forEach(h => {
-    html += `<tr>
-      <td><strong>${h.mapel}</strong></td>
-      <td><span class="badge bg-secondary">${h.kelas || '-'}</span></td>
-      <td class="fw-bold text-success">Rp ${(h.honorPerPertemuan||0).toLocaleString('id-ID')}</td>
-      <td class="text-center">
-        <div class="d-flex gap-1 justify-content-center">
-          <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditHonor(${h.rowIndex})"><i class="fas fa-edit me-1"></i>Edit</button>
-          <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusHonor(${h.rowIndex},'${(h.mapel||'').replace(/'/g,"\\'")} (${h.kelas||''})')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
-        </div>
-      </td>
-    </tr>`;
-  });
-  let body = document.getElementById('tabelHonorBody');
-  if (body) body.innerHTML = html || '<tr><td colspan="4" class="text-center text-muted py-4">Belum ada data honor</td></tr>';
-}
-
-// ==========================================
-// STUB: Modal/Action handlers (sementara — supaya tombol tidak error)
-// ==========================================
-function fiturBelumTersedia(nama) {
-  tampilkanToast('ℹ️ Fitur "' + nama + '" sedang dalam pengembangan.', 'warning');
-}
-function bukaModalTambahGuru()        { fiturBelumTersedia('Tambah Guru'); }
-function bukaModalTambahHonor()       { fiturBelumTersedia('Tambah Honor'); }
-function bukaModalTambahSchedule()    { fiturBelumTersedia('Tambah Jadwal'); }
-function bukaModalKelolaRuangan()     { fiturBelumTersedia('Kelola Ruangan'); }
-function siapkanEditGuru(r)           { fiturBelumTersedia('Edit Guru'); }
-function konfirmasiHapusGuru(r,n)     { if(confirm(`Hapus guru "${n}"?`)) hapusGuruRow(r); }
-function siapkanEditHonor(r)          { fiturBelumTersedia('Edit Honor'); }
-function konfirmasiHapusHonor(r,n)    { if(confirm(`Hapus honor "${n}"?`)) hapusHonorRow(r); }
-function hapusGuruRow(rowIndex) {
-  tampilkanLoading('Menghapus...');
-  google.script.run
-    .withSuccessHandler(res => { sembunyikanLoading(); tampilkanToast(res, 'success'); guruDataLoaded=false; fetchGuruData(); })
-    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('❌ '+err.message,'error'); })
-    .hapusGuru(rowIndex);
-}
-function hapusHonorRow(rowIndex) {
-  tampilkanLoading('Menghapus...');
-  google.script.run
-    .withSuccessHandler(res => { sembunyikanLoading(); tampilkanToast(res, 'success'); guruDataLoaded=false; fetchGuruData(); })
-    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('❌ '+err.message,'error'); })
-    .hapusHonor(rowIndex);
-}
-
-// ==========================================
-// HELPER: Isi dropdown kelas dari jenjangSistem
-// ==========================================
-function populateKelasSelect(selectId) {
-  let el = document.getElementById(selectId);
-  if (!el) return;
-  let html = '<option value="">Pilih Kelas</option>';
-  jenjangSistem.forEach(j => {
-    html += `<optgroup label="${j.nama}">`;
-    j.daftar.forEach(k => { html += `<option value="${k}">${k}</option>`; });
-    html += '</optgroup>';
-  });
-  el.innerHTML = html;
-}
-
-// ==========================================
-// FORM GURU: reset, toggle mode, submit, search
-// ==========================================
-function resetFormGuruKeDefault() {
-  let form = document.getElementById('formGuru');
-  if (form) form.reset();
-  let r = document.getElementById('gRowIndexHidden');
-  if (r) r.value = '';
-  let judul = document.getElementById('txtJudulFormGuru');
-  if (judul) judul.innerText = 'Tambah Data Guru';
-  let btn = document.getElementById('btnSimpanGuru');
-  if (btn) { btn.innerText = 'Simpan'; btn.className = 'btn btn-primary w-100 fw-bold py-2'; }
-  toggleGuruMode();
+function bukaModalTambahGuru() {
+  resetFormGuruKeDefault();
+  generateKelasCheckboxesGuru([]);
+  initModalGuru();
+  bsModalGuru.show();
 }
 function toggleGuruMode() {
-  let modeEl = document.querySelector('input[name="gMode"]:checked');
-  let mode   = modeEl ? modeEl.value : 'new';
-  let secNew = document.getElementById('secGuruBaru');
-  let secExist = document.getElementById('secGuruExist');
-  if (secNew)   secNew.style.display   = (mode === 'new')      ? '' : 'none';
-  if (secExist) secExist.style.display = (mode === 'existing') ? '' : 'none';
+  let mode = document.querySelector('input[name="gMode"]:checked').value;
+  let isNew = (mode === 'new');
+  document.getElementById('gNamaBaruWrapper').classList.toggle('d-none', !isNew);
+  document.getElementById('gSearchWrapper').classList.toggle('d-none', isNew);
+  document.getElementById('gNamaKonfirmasiWrapper').classList.toggle('d-none', isNew);
+  if (isNew) {
+    document.getElementById('gGuruSearch').value = '';
+    document.getElementById('gNamaKonfirmasi').value = '';
+  } else {
+    document.getElementById('gNamaBaru').value = '';
+  }
 }
 function onGuruModalSearchChange() {
-  let cari = (document.getElementById('gSearchExist')?.value || '').toLowerCase();
-  let seen = {};
-  let uniqueGuru = [];
-  rawGuru.forEach(g => { if (g.id && !seen[g.id]) { seen[g.id] = true; uniqueGuru.push(g); }});
-  let hasil = uniqueGuru.filter(g =>
-    (g.id||'').toLowerCase().includes(cari) ||
-    (g.nama||'').toLowerCase().includes(cari)
-  );
-  let sel = document.getElementById('gExistId');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">-- Pilih Guru --</option>' +
-    hasil.map(g => `<option value="${g.id}">${g.id} - ${g.nama}</option>`).join('');
-}
-function onGuruSearchChange() { onGuruModalSearchChange(); }
-
-function submitGuru() {
-  let modeEl = document.querySelector('input[name="gMode"]:checked');
-  let mode   = modeEl ? modeEl.value : 'new';
-  let mapel  = (document.getElementById('gMapel')?.value || '').trim();
-  let checkboxes = document.querySelectorAll('.gKelasCheck:checked');
-  let kelasArr = Array.from(checkboxes).map(c => c.value);
-  let payload = { mapel, kelasArr };
-  if (mode === 'new') {
-    payload.namaBaru = (document.getElementById('gNamaBaru')?.value || '').trim();
-  } else {
-    payload.idGuru = document.getElementById('gExistId')?.value || '';
-    let editRow = document.getElementById('gRowIndexHidden')?.value || '';
-    if (editRow) payload.rowIndex = editRow;
-  }
-  if (!mapel || kelasArr.length === 0) { tampilkanToast('Lengkapi semua field!', 'warning'); return; }
-  setTombolLoading('btnSimpanGuru', true, 'Menyimpan...');
-  tampilkanLoading('Menyimpan...');
-  google.script.run
-    .withSuccessHandler(res => {
-      sembunyikanLoading();
-      setTombolLoading('btnSimpanGuru', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
-      let tipe = res.includes('✅') ? 'success' : 'warning';
-      tampilkanToast(res, tipe);
-      if (tipe === 'success') {
-        let m = bootstrap.Modal.getInstance(document.getElementById('modalGuru'));
-        if (m) m.hide();
-        resetFormGuruKeDefault();
-        guruDataLoaded = false;
-        fetchGuruData();
-      }
-    })
-    .withFailureHandler(err => {
-      sembunyikanLoading();
-      setTombolLoading('btnSimpanGuru', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
-      tampilkanToast('❌ ' + err.message, 'error');
-    })
-    .simpanGuru(payload);
-}
-
-// Buka modal tambah guru
-function bukaModalTambahGuru() {
-  let el = document.getElementById('modalGuru');
-  if (!el) { fiturBelumTersedia('Tambah Guru'); return; }
-  if (!bsModalGuru) bsModalGuru = new bootstrap.Modal(el);
-  resetFormGuruKeDefault();
-  // Isi dropdown kelas sebagai checkbox
-  let container = document.getElementById('gKelasContainer');
-  if (container) {
-    let html = '';
-    jenjangSistem.forEach(j => {
-      html += `<div class="fw-bold small text-muted mt-2">${j.nama}</div>`;
-      j.daftar.forEach(k => {
-        html += `<div class="form-check form-check-inline">
-          <input class="form-check-input gKelasCheck" type="checkbox" value="${k}" id="gkc_${k.replace(/\s/g,'_')}">
-          <label class="form-check-label small" for="gkc_${k.replace(/\s/g,'_')}">${k}</label>
-        </div>`;
-      });
-    });
-    container.innerHTML = html;
-  }
-  bsModalGuru.show();
+  let val = document.getElementById('gGuruSearch').value;
+  let idGuru = val.split(' - ')[0].trim();
+  let match = rawGuru.find(g => g.id === idGuru);
+  document.getElementById('gNamaKonfirmasi').value = match ? match.nama : '';
 }
 function siapkanEditGuru(rowIndex) {
   let g = rawGuru.find(x => x.rowIndex === rowIndex);
   if (!g) return;
-  let el = document.getElementById('modalGuru');
-  if (!el) { fiturBelumTersedia('Edit Guru'); return; }
-  if (!bsModalGuru) bsModalGuru = new bootstrap.Modal(el);
   resetFormGuruKeDefault();
-  // Set mode existing & hidden rowIndex
-  let modeExist = document.getElementById('gModeExisting');
-  if (modeExist) { modeExist.checked = true; toggleGuruMode(); }
-  let r = document.getElementById('gRowIndexHidden');
-  if (r) r.value = g.rowIndex;
-  let mapelEl = document.getElementById('gMapel');
-  if (mapelEl) mapelEl.value = g.mapel;
-  // Isi container kelas & centang yang sesuai
-  let container = document.getElementById('gKelasContainer');
-  if (container) {
-    let html = '';
-    jenjangSistem.forEach(j => {
-      html += `<div class="fw-bold small text-muted mt-2">${j.nama}</div>`;
-      j.daftar.forEach(k => {
-        let checked = (g.kelas||'').split(',').map(x=>x.trim()).includes(k) ? 'checked' : '';
-        html += `<div class="form-check form-check-inline">
-          <input class="form-check-input gKelasCheck" type="checkbox" value="${k}" ${checked} id="gkc_${k.replace(/\s/g,'_')}">
-          <label class="form-check-label small" for="gkc_${k.replace(/\s/g,'_')}">${k}</label>
-        </div>`;
-      });
-    });
-    container.innerHTML = html;
-  }
-  let judul = document.getElementById('txtJudulFormGuru');
-  if (judul) judul.innerText = `Edit Guru: ${g.nama}`;
-  let btn = document.getElementById('btnSimpanGuru');
-  if (btn) { btn.innerText = 'Update'; btn.className = 'btn btn-warning w-100 fw-bold py-2'; }
+  document.getElementById('gModeSelector').classList.add('d-none');
+  document.getElementById('gNamaBaruWrapper').classList.remove('d-none');
+  document.getElementById('gNamaBaru').value = g.nama;
+  document.getElementById('gRowIndexHidden').value = g.rowIndex;
+  document.getElementById('gMapel').value = g.mapel;
+  let checkedArr = g.kelas.split(',').map(k => k.trim()).filter(k => k);
+  generateKelasCheckboxesGuru(checkedArr);
+  document.getElementById('txtJudulFormGuru').innerText = 'Edit Mapel Guru (' + g.id + ')';
+  document.getElementById('btnSimpanGuru').innerText = 'Update Data';
+  document.getElementById('btnSimpanGuru').className = 'btn btn-warning w-100 fw-bold py-2';
+  initModalGuru();
   bsModalGuru.show();
 }
-
-// ==========================================
-// FORM HONOR: reset, auto-fill, submit
-// ==========================================
-function resetFormHonorKeDefault() {
-  let form = document.getElementById('formHonor');
-  if (form) form.reset();
-  let r = document.getElementById('hRowIndexHidden');
-  if (r) r.value = '';
-  let judul = document.getElementById('txtJudulFormHonor');
-  if (judul) judul.innerText = 'Tambah Rate Honor';
-  let btn = document.getElementById('btnSimpanHonor');
-  if (btn) { btn.innerText = 'Simpan'; btn.className = 'btn btn-primary w-100 fw-bold py-2'; }
+function resetFormGuruKeDefault() {
+  document.getElementById('formGuru').reset();
+  document.getElementById('gRowIndexHidden').value = '';
+  document.getElementById('gNamaKonfirmasi').value = '';
+  document.getElementById('gModeSelector').classList.remove('d-none');
+  document.getElementById('gNamaBaruWrapper').classList.remove('d-none');
+  document.getElementById('gSearchWrapper').classList.add('d-none');
+  document.getElementById('gNamaKonfirmasiWrapper').classList.add('d-none');
+  document.getElementById('gModeNew').checked = true;
+  document.getElementById('txtJudulFormGuru').innerText = 'Tambah Data Guru';
+  document.getElementById('btnSimpanGuru').innerText = 'Simpan';
+  document.getElementById('btnSimpanGuru').className = 'btn btn-primary w-100 fw-bold py-2';
+  generateKelasCheckboxesGuru([]);
 }
-function autoFillHonorSesi() {
-  // Bisa dikosongkan atau diisi logic auto-fill berdasarkan mapel+kelas
+function submitGuru() {
+  let rowIndex = document.getElementById('gRowIndexHidden').value;
+  let mapel = document.getElementById('gMapel').value.trim();
+  let kelasArr = [];
+  document.querySelectorAll('.chk-guru-kelas:checked').forEach(cb => kelasArr.push(cb.value));
+  if (!mapel) { tampilkanToast('Mata pelajaran wajib diisi!', 'warning'); return; }
+  if (kelasArr.length === 0) { tampilkanToast('Pilih minimal satu kelas!', 'warning'); return; }
+  let payload = { rowIndex: rowIndex, mapel: mapel, kelasArr: kelasArr };
+  if (rowIndex) {
+    payload.namaBaru = document.getElementById('gNamaBaru').value.trim();
+  } else {
+    let mode = document.querySelector('input[name="gMode"]:checked').value;
+    if (mode === 'new') {
+      payload.namaBaru = document.getElementById('gNamaBaru').value.trim();
+      payload.idGuru = '';
+      if (!payload.namaBaru) { tampilkanToast('Nama guru wajib diisi!', 'warning'); return; }
+    } else {
+      payload.idGuru = document.getElementById('gGuruSearch').value.split(' - ')[0].trim();
+      if (!payload.idGuru) { tampilkanToast('Pilih guru yang sudah ada!', 'warning'); return; }
+    }
+  }
+  setTombolLoading('btnSimpanGuru', true, 'Menyimpan...');
+  tampilkanLoading('Menyimpan data guru...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanGuru', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
+      let tipe = res.includes('\u2705') ? 'success' : 'warning';
+      tampilkanToast(res, tipe);
+      if (tipe === 'success') { bsModalGuru.hide(); resetFormGuruKeDefault(); guruDataLoaded = false; fetchGuruData(); }
+    })
+    .withFailureHandler(err => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanGuru', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
+      tampilkanToast('\u274c Error: ' + err.message, 'error');
+    })
+    .simpanGuru(payload);
+}
+function konfirmasiHapusGuru(rowIndex, label) {
+  if (!confirm('Hapus data guru "' + label + '"?\n(Hanya baris mapel ini yang dihapus)')) return;
+  tampilkanLoading('Menghapus...');
+  google.script.run
+    .withSuccessHandler(res => { sembunyikanLoading(); tampilkanToast(res, 'success'); guruDataLoaded = false; fetchGuruData(); })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c ' + err.message, 'error'); })
+    .hapusGuru(rowIndex);
+}
+
+// ── HONOR CRUD ──
+function initModalHonor() {
+  if (!bsModalHonor) bsModalHonor = new bootstrap.Modal(document.getElementById('modalHonor'));
 }
 function bukaModalTambahHonor() {
-  let el = document.getElementById('modalHonor');
-  if (!el) { fiturBelumTersedia('Tambah Honor'); return; }
-  if (!bsModalHonor) bsModalHonor = new bootstrap.Modal(el);
   resetFormHonorKeDefault();
   populateKelasSelect('hKelas');
+  initModalHonor();
   bsModalHonor.show();
 }
 function siapkanEditHonor(rowIndex) {
   let h = rawHonor.find(x => x.rowIndex === rowIndex);
   if (!h) return;
-  let el = document.getElementById('modalHonor');
-  if (!el) { fiturBelumTersedia('Edit Honor'); return; }
-  if (!bsModalHonor) bsModalHonor = new bootstrap.Modal(el);
-  resetFormHonorKeDefault();
-  let r = document.getElementById('hRowIndexHidden');
-  if (r) r.value = h.rowIndex;
-  let mapelEl = document.getElementById('hMapel');
-  if (mapelEl) mapelEl.value = h.mapel;
+  document.getElementById('hRowIndexHidden').value = h.rowIndex;
+  document.getElementById('hMapel').value = h.mapel;
   populateKelasSelect('hKelas');
-  let kelasEl = document.getElementById('hKelas');
-  if (kelasEl) kelasEl.value = h.kelas;
-  let honorEl = document.getElementById('hHonor');
-  if (honorEl) honorEl.value = (h.honorPerPertemuan||0).toLocaleString('id-ID');
-  let judul = document.getElementById('txtJudulFormHonor');
-  if (judul) judul.innerText = `Edit Honor: ${h.mapel} (${h.kelas})`;
-  let btn = document.getElementById('btnSimpanHonor');
-  if (btn) { btn.innerText = 'Update'; btn.className = 'btn btn-warning w-100 fw-bold py-2'; }
+  document.getElementById('hKelas').value = h.kelas;
+  document.getElementById('hHonor').value = h.honorPerPertemuan.toLocaleString('id-ID');
+  document.getElementById('txtJudulFormHonor').innerText = 'Edit Honor (' + h.mapel + ' \u2014 ' + h.kelas + ')';
+  document.getElementById('btnSimpanHonor').innerText = 'Update Honor';
+  document.getElementById('btnSimpanHonor').className = 'btn btn-warning w-100 fw-bold py-2';
+  initModalHonor();
   bsModalHonor.show();
+}
+function resetFormHonorKeDefault() {
+  document.getElementById('formHonor').reset();
+  document.getElementById('hRowIndexHidden').value = '';
+  document.getElementById('txtJudulFormHonor').innerText = 'Tambah Rate Honor';
+  document.getElementById('btnSimpanHonor').innerText = 'Simpan';
+  document.getElementById('btnSimpanHonor').className = 'btn btn-primary w-100 fw-bold py-2';
 }
 function submitHonor() {
   let payload = {
-    rowIndex: document.getElementById('hRowIndexHidden')?.value || '',
-    mapel   : (document.getElementById('hMapel')?.value || '').trim(),
-    kelas   : document.getElementById('hKelas')?.value || '',
-    honor   : (document.getElementById('hHonor')?.value || '').replace(/\./g,'').trim()
+    rowIndex: document.getElementById('hRowIndexHidden').value,
+    mapel: document.getElementById('hMapel').value,
+    kelas: document.getElementById('hKelas').value,
+    honor: getRawNumber('hHonor')
   };
-  if (!payload.mapel || !payload.kelas || !payload.honor) { tampilkanToast('Lengkapi semua field!','warning'); return; }
+  if (!payload.mapel || !payload.kelas || !payload.honor) { tampilkanToast('Mohon lengkapi semua field!', 'warning'); return; }
   setTombolLoading('btnSimpanHonor', true, 'Menyimpan...');
-  tampilkanLoading('Menyimpan...');
+  tampilkanLoading('Menyimpan data honor...');
   google.script.run
     .withSuccessHandler(res => {
       sembunyikanLoading();
       setTombolLoading('btnSimpanHonor', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
-      let tipe = res.includes('✅') ? 'success' : 'warning';
+      let tipe = res.includes('\u2705') ? 'success' : 'warning';
       tampilkanToast(res, tipe);
-      if (tipe === 'success') {
-        let m = bootstrap.Modal.getInstance(document.getElementById('modalHonor'));
-        if (m) m.hide();
-        resetFormHonorKeDefault();
-        guruDataLoaded = false;
-        fetchGuruData();
-      }
+      if (tipe === 'success') { bsModalHonor.hide(); resetFormHonorKeDefault(); guruDataLoaded = false; fetchGuruData(); }
     })
     .withFailureHandler(err => {
       sembunyikanLoading();
       setTombolLoading('btnSimpanHonor', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
-      tampilkanToast('❌ ' + err.message, 'error');
+      tampilkanToast('\u274c Error: ' + err.message, 'error');
     })
     .simpanHonor(payload);
 }
+function konfirmasiHapusHonor(rowIndex, label) {
+  if (!confirm('Hapus rate honor "' + label + '"?')) return;
+  tampilkanLoading('Menghapus...');
+  google.script.run
+    .withSuccessHandler(res => { sembunyikanLoading(); tampilkanToast(res, 'success'); guruDataLoaded = false; fetchGuruData(); })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c ' + err.message, 'error'); })
+    .hapusHonor(rowIndex);
+}
 
-// ==========================================
-// FORM SCHEDULE: reset, hitung durasi, guru search, submit
-// ==========================================
-function resetFormScheduleKeDefault() {
-  let form = document.getElementById('formSchedule');
-  if (form) form.reset();
-  let r = document.getElementById('sRowIndexHidden');
-  if (r) r.value = '';
-  let dur = document.getElementById('sDurasi');
-  if (dur) dur.value = '';
-  let honor = document.getElementById('sHonorPerSesi');
-  if (honor) honor.value = '';
-  let judul = document.getElementById('txtJudulFormSchedule');
-  if (judul) judul.innerText = 'Tambah Jadwal';
-  let btn = document.getElementById('btnSimpanSchedule');
-  if (btn) { btn.innerHTML = '<i class="fas fa-check me-1"></i>Simpan Jadwal'; btn.className = 'btn btn-success w-100 fw-bold py-2'; }
-}
-function hitungDurasi() {
-  let mulai = document.getElementById('sJamMulai')?.value;
-  let akhir = document.getElementById('sJamBerakhir')?.value;
-  let dur   = document.getElementById('sDurasi');
-  if (!dur) return;
-  dur.value = hitungDurasiStr(mulai, akhir);
-}
-function onGuruSearchChange() {
-  let cari   = (document.getElementById('sGuruSearch')?.value || '').toLowerCase();
-  let idHidden = document.getElementById('sIdGuru');
-  let namaHidden = document.getElementById('sNamaGuru');
-  if (!cari) return;
-  let match = rawGuru.find(g =>
-    (g.id + ' - ' + g.nama).toLowerCase() === cari ||
-    g.id.toLowerCase() === cari ||
-    g.nama.toLowerCase() === cari
-  );
-  if (match) {
-    if (idHidden)   idHidden.value   = match.id;
-    if (namaHidden) namaHidden.value = match.nama;
-  }
+// ── SCHEDULE CRUD ──
+function initModalSchedule() {
+  if (!bsModalSchedule) bsModalSchedule = new bootstrap.Modal(document.getElementById('modalSchedule'));
 }
 function bukaModalTambahSchedule() {
-  let el = document.getElementById('modalSchedule');
-  if (!el) { fiturBelumTersedia('Tambah Jadwal'); return; }
-  if (!bsModalSchedule) bsModalSchedule = new bootstrap.Modal(el);
   resetFormScheduleKeDefault();
   populateKelasSelect('sKelas');
+  if (!guruDataLoaded) fetchGuruData(() => { initModalSchedule(); bsModalSchedule.show(); });
+  else { initModalSchedule(); bsModalSchedule.show(); }
+}
+function siapkanEditSchedule(rowIndex) {
+  let s = rawSchedule.find(x => x.rowIndex === rowIndex);
+  if (!s) return;
+  resetFormScheduleKeDefault();
+  populateKelasSelect('sKelas');
+  document.getElementById('sRowIndexHidden').value = s.rowIndex;
+  if (s.tgl) document.getElementById('sTanggal').value = s.tgl.split('T')[0];
+  document.getElementById('sJamMulai').value = s.jamMulai || '';
+  document.getElementById('sJamBerakhir').value = s.jamBerakhir || '';
+  document.getElementById('sDurasi').value = s.durasi || '';
+  document.getElementById('sRuangan').value = s.ruangan || '';
+  document.getElementById('sKelas').value = s.kelas;
+  document.getElementById('sMapel').value = s.mapel;
+  document.getElementById('sGuruSearch').value = s.idGuru + ' - ' + s.namaGuru;
+  document.getElementById('sNamaGuru').value = s.namaGuru;
+  document.getElementById('txtJudulFormSchedule').innerText = 'Edit Jadwal (' + s.mapel + ' \u00b7 ' + s.kelas + ')';
+  document.getElementById('btnSimpanSchedule').innerText = 'Update Jadwal';
+  document.getElementById('btnSimpanSchedule').className = 'btn btn-warning w-100 fw-bold py-2';
+  autoFillHonorSesi();
+  initModalSchedule();
   bsModalSchedule.show();
 }
+function resetFormScheduleKeDefault() {
+  document.getElementById('formSchedule').reset();
+  document.getElementById('sRowIndexHidden').value = '';
+  document.getElementById('sHonorInfo').innerHTML = '-';
+  document.getElementById('txtJudulFormSchedule').innerText = 'Tambah Jadwal';
+  document.getElementById('btnSimpanSchedule').innerText = 'Simpan Jadwal';
+  document.getElementById('btnSimpanSchedule').className = 'btn btn-success w-100 fw-bold py-2';
+}
+function hitungDurasi() {
+  let a = document.getElementById('sJamMulai').value;
+  let b = document.getElementById('sJamBerakhir').value;
+  if (!a || !b) { document.getElementById('sDurasi').value = ''; return; }
+  let [h1, m1] = a.split(':').map(Number);
+  let [h2, m2] = b.split(':').map(Number);
+  let m = (h2 * 60 + m2) - (h1 * 60 + m1);
+  if (m <= 0) { document.getElementById('sDurasi').value = ''; return; }
+  document.getElementById('sDurasi').value = (Math.floor(m / 60) > 0 ? Math.floor(m / 60) + ' jam ' : '') + (m % 60 > 0 ? m % 60 + ' menit' : '');
+}
+function onGuruSearchChange() {
+  let val = document.getElementById('sGuruSearch').value;
+  let idGuru = val.split(' - ')[0].trim();
+  let rows = rawGuru.filter(g => g.id === idGuru);
+  document.getElementById('sNamaGuru').value = rows.length > 0 ? rows[0].nama : '';
+  let mapels = [...new Set(rows.map(g => g.mapel))];
+  if (mapels.length > 0) {
+    document.getElementById('sMapelOptions').innerHTML = mapels.map(m => '<option value="' + m + '">').join('');
+  }
+  autoFillHonorSesi();
+}
+function autoFillHonorSesi() {
+  let mapel = document.getElementById('sMapel').value.trim();
+  let kelas = document.getElementById('sKelas').value.trim();
+  let el = document.getElementById('sHonorInfo');
+  if (!mapel || !kelas) { el.innerHTML = '-'; return; }
+  let entry = rawHonor.find(h => h.mapel.toLowerCase() === mapel.toLowerCase() && h.kelas.toLowerCase() === kelas.toLowerCase());
+  if (entry) {
+    el.innerHTML = '<span class="fw-bold text-success">Rp ' + entry.honorPerPertemuan.toLocaleString('id-ID') + '</span> <span class="text-muted">/ sesi</span>';
+  } else {
+    el.innerHTML = '<span class="text-warning small fw-bold">\u26a0\ufe0f Honor belum diatur untuk kombinasi ini</span>';
+  }
+}
 function submitSchedule() {
-  let tgl       = document.getElementById('sTgl')?.value;
-  let jamMulai  = document.getElementById('sJamMulai')?.value;
-  let jamBerakhir = document.getElementById('sJamBerakhir')?.value;
-  let ruangan   = (document.getElementById('sRuangan')?.value || '').trim();
-  let kelas     = document.getElementById('sKelas')?.value;
-  let mapel     = (document.getElementById('sMapel')?.value || '').trim();
-  let idGuru    = document.getElementById('sIdGuru')?.value || '';
-  let namaGuru  = document.getElementById('sNamaGuru')?.value || '';
-  let rowIndex  = document.getElementById('sRowIndexHidden')?.value || '';
-  if (!tgl || !kelas || !mapel || !idGuru) { tampilkanToast('Lengkapi semua field wajib!', 'warning'); return; }
+  let idGuru = document.getElementById('sGuruSearch').value.split(' - ')[0].trim();
   let payload = {
-    rowIndex, tgl, jamMulai, jamBerakhir,
-    durasi: hitungDurasiStr(jamMulai, jamBerakhir),
-    ruangan, kelas, mapel, idGuru, namaGuru
+    rowIndex: document.getElementById('sRowIndexHidden').value,
+    tgl: document.getElementById('sTanggal').value,
+    jamMulai: document.getElementById('sJamMulai').value,
+    jamBerakhir: document.getElementById('sJamBerakhir').value,
+    durasi: document.getElementById('sDurasi').value,
+    ruangan: document.getElementById('sRuangan').value,
+    kelas: document.getElementById('sKelas').value,
+    mapel: document.getElementById('sMapel').value,
+    idGuru: idGuru,
+    namaGuru: document.getElementById('sNamaGuru').value
   };
+  if (!payload.tgl || !payload.kelas || !payload.mapel || !payload.idGuru) {
+    tampilkanToast('Tanggal, Kelas, Mata Pelajaran, dan Guru wajib diisi!', 'warning'); return;
+  }
   setTombolLoading('btnSimpanSchedule', true, 'Menyimpan...');
-  tampilkanLoading('Menyimpan...');
+  tampilkanLoading('Menyimpan jadwal...');
   google.script.run
     .withSuccessHandler(res => {
       sembunyikanLoading();
-      setTombolLoading('btnSimpanSchedule', false, '', '<i class="fas fa-check me-1"></i>Simpan Jadwal', 'btn btn-success w-100 fw-bold py-2');
-      let tipe = res.includes('✅') ? 'success' : 'warning';
+      setTombolLoading('btnSimpanSchedule', false, '', 'Simpan Jadwal', 'btn btn-success w-100 fw-bold py-2');
+      let tipe = res.includes('\u2705') ? 'success' : 'warning';
       tampilkanToast(res, tipe);
       if (tipe === 'success') {
-        let m = bootstrap.Modal.getInstance(document.getElementById('modalSchedule'));
-        if (m) m.hide();
+        if (payload.ruangan && !calendarRooms.includes(payload.ruangan)) calendarRooms.push(payload.ruangan);
+        bsModalSchedule.hide();
         resetFormScheduleKeDefault();
         scheduleDataLoaded = false;
         fetchScheduleData();
@@ -2130,54 +1953,65 @@ function submitSchedule() {
     })
     .withFailureHandler(err => {
       sembunyikanLoading();
-      setTombolLoading('btnSimpanSchedule', false, '', '<i class="fas fa-check me-1"></i>Simpan Jadwal', 'btn btn-success w-100 fw-bold py-2');
-      tampilkanToast('❌ ' + err.message, 'error');
+      setTombolLoading('btnSimpanSchedule', false, '', 'Simpan Jadwal', 'btn btn-success w-100 fw-bold py-2');
+      tampilkanToast('\u274c Error: ' + err.message, 'error');
     })
     .simpanSchedule(payload);
 }
+function konfirmasiHapusSchedule(rowIndex) {
+  if (!confirm('Hapus jadwal ini secara permanen?')) return;
+  tampilkanLoading('Menghapus jadwal...');
+  google.script.run
+    .withSuccessHandler(res => { sembunyikanLoading(); tampilkanToast(res, 'success'); scheduleDataLoaded = false; fetchScheduleData(); })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c ' + err.message, 'error'); })
+    .hapusSchedule(rowIndex);
+}
 
-// ==========================================
-// KELOLA RUANGAN (dari panel kalender schedule)
-// ==========================================
+// ── KELOLA RUANGAN (kalender) ──
 function bukaModalKelolaRuangan() {
-  let el = document.getElementById('modalKelolaRuangan');
-  if (!el) { fiturBelumTersedia('Kelola Ruangan'); return; }
-  if (!bsModalRuangan) bsModalRuangan = new bootstrap.Modal(el);
-  renderDaftarRuanganModal();
+  if (!bsModalRuangan) bsModalRuangan = new bootstrap.Modal(document.getElementById('modalRuangan'));
+  renderRuanganList();
   bsModalRuangan.show();
 }
-function renderDaftarRuanganModal() {
-  let container = document.getElementById('daftarRuanganModal');
-  if (!container) return;
-  if (rawRuangan.length === 0) {
-    container.innerHTML = '<p class="text-muted small text-center">Belum ada ruangan. Tambah dari menu Data Ruangan.</p>';
-    return;
+function renderRuanganList() {
+  let html = '';
+  if (calendarRooms.length === 0) {
+    html = '<p class="text-muted small fst-italic">Belum ada ruangan. Tambahkan di bawah atau dari menu Data Ruangan.</p>';
+  } else {
+    calendarRooms.forEach((room, i) => {
+      html += '<div class="d-flex align-items-center justify-content-between mb-2 px-3 py-2 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0;">';
+      html += '<span class="fw-bold small"><i class="fas fa-door-open me-2" style="color:#94a3b8;"></i>' + room + '</span>';
+      html += '<div class="d-flex gap-1">';
+      if (i > 0) html += '<button class="btn btn-sm btn-light py-0 px-1" onclick="moveRoom(' + i + ',-1)"><i class="fas fa-arrow-up" style="font-size:10px;"></i></button>';
+      if (i < calendarRooms.length - 1) html += '<button class="btn btn-sm btn-light py-0 px-1" onclick="moveRoom(' + i + ',1)"><i class="fas fa-arrow-down" style="font-size:10px;"></i></button>';
+      html += '<button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="hapusRuangan(' + i + ')" style="border-radius:6px;"><i class="fas fa-times" style="font-size:10px;"></i></button>';
+      html += '</div></div>';
+    });
   }
-  container.innerHTML = rawRuangan.map(r =>
-    `<div class="d-flex align-items-center justify-content-between py-1 border-bottom">
-      <span class="fw-bold small">${r.ruangan}${r.kapasitas > 0 ? ' <span class="text-muted">('+r.kapasitas+' org)</span>' : ''}</span>
-    </div>`
-  ).join('');
+  document.getElementById('ruanganList').innerHTML = html;
 }
 function tambahRuanganBaru() {
-  let input = document.getElementById('inputRuanganBaru');
-  let nama  = (input?.value || '').trim();
-  if (!nama) { tampilkanToast('Masukkan nama ruangan!', 'warning'); return; }
-  tampilkanLoading('Menambahkan ruangan...');
-  google.script.run
-    .withSuccessHandler(res => {
-      sembunyikanLoading();
-      let tipe = res.includes('✅') ? 'success' : 'warning';
-      tampilkanToast(res, tipe);
-      if (tipe === 'success') {
-        if (input) input.value = '';
-        masterDataLoaded = false;
-        fetchMasterData(function() { renderDaftarRuanganModal(); });
-      }
-    })
-    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('❌ ' + err.message, 'error'); })
-    .simpanRuanganMaster({ ruangan: nama, kapasitas: 0 });
+  let v = document.getElementById('newRuanganInput').value.trim();
+  if (!v) { tampilkanToast('Nama ruangan tidak boleh kosong!', 'warning'); return; }
+  if (calendarRooms.includes(v)) { tampilkanToast('Ruangan sudah ada!', 'warning'); return; }
+  calendarRooms.push(v);
+  document.getElementById('newRuanganInput').value = '';
+  renderRuanganList();
 }
+function hapusRuangan(idx) {
+  if (!confirm('Hapus ruangan "' + calendarRooms[idx] + '" dari tampilan kalender?')) return;
+  calendarRooms.splice(idx, 1);
+  renderRuanganList();
+}
+function moveRoom(idx, dir) {
+  let t = idx + dir;
+  if (t < 0 || t >= calendarRooms.length) return;
+  let tmp = calendarRooms[idx];
+  calendarRooms[idx] = calendarRooms[t];
+  calendarRooms[t] = tmp;
+  renderRuanganList();
+}
+
 
 window.onload = function() {
   fetchData();
