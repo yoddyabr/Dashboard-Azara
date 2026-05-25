@@ -39,22 +39,7 @@ function getGuruData() {
     }
   } catch(e) { Logger.log("Error sheet guru: " + e.toString()); }
 
-  try {
-    var sheetHonor = ss.getSheetByName(CONFIG.SHEET_HONOR);
-    if (sheetHonor) {
-      var dataHonor = sheetHonor.getDataRange().getValues();
-      for (var j = 1; j < dataHonor.length; j++) {
-        if (!dataHonor[j][0] || dataHonor[j][0].toString().trim() === "") continue;
-        honorList.push({
-          rowIndex         : j + 1,
-          mapel            : dataHonor[j][0].toString().trim(),
-          kelas            : dataHonor[j][1] ? dataHonor[j][1].toString().trim() : "",
-          honorPerPertemuan: (dataHonor[j][2] && !isNaN(dataHonor[j][2])) ? Number(dataHonor[j][2]) : 0
-        });
-      }
-    }
-  } catch(e) { Logger.log("Error sheet honor: " + e.toString()); }
-
+  // Honor sekarang ada di Data Mata Pelajaran (lihat MasterDataService.gs)
   var result = { guruList: guruList, honorList: honorList };
   try { cache.put(CACHE_KEY_GURU, JSON.stringify(result), 120); } catch(e) {}
   return result;
@@ -154,53 +139,3 @@ function hapusGuru(rowIndex) {
 }
 
 // ==========================================
-// 4. SIMPAN / EDIT DATA HONOR
-// ==========================================
-function simpanHonor(payload) {
-  if (!payload.mapel || payload.mapel.toString().trim() === "") return "❌ Mata pelajaran tidak boleh kosong!";
-  if (!payload.kelas || payload.kelas.toString().trim() === "") return "❌ Kelas tidak boleh kosong!";
-  if (!payload.honor || isNaN(payload.honor) || Number(payload.honor) <= 0) return "❌ Honor harus diisi dengan angka yang valid!";
-
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheetHonor = ss.getSheetByName(CONFIG.SHEET_HONOR);
-  if (!sheetHonor) {
-    sheetHonor = ss.insertSheet(CONFIG.SHEET_HONOR);
-    sheetHonor.appendRow(["Mata Pelajaran","Kelas","Honor per Pertemuan"]);
-  }
-
-  if (payload.rowIndex && parseInt(payload.rowIndex) > 1) {
-    var row = parseInt(payload.rowIndex);
-    sheetHonor.getRange(row, 1).setValue(payload.mapel);
-    sheetHonor.getRange(row, 2).setValue(payload.kelas);
-    sheetHonor.getRange(row, 3).setValue(Number(payload.honor));
-    invalidateGuruCache();
-    return "✅ Data Honor berhasil diperbarui!";
-  }
-
-  var dataHonor = sheetHonor.getDataRange().getValues();
-  for (var i = 1; i < dataHonor.length; i++) {
-    if (dataHonor[i][0] && dataHonor[i][1] &&
-        dataHonor[i][0].toString().trim().toLowerCase() === payload.mapel.toLowerCase() &&
-        dataHonor[i][1].toString().trim().toLowerCase() === payload.kelas.toLowerCase()) {
-      return "⚠️ Honor untuk " + payload.mapel + " kelas " + payload.kelas + " sudah ada! Edit data yang lama.";
-    }
-  }
-  sheetHonor.appendRow([payload.mapel, payload.kelas, Number(payload.honor)]);
-  invalidateGuruCache();
-  return "✅ Data Honor berhasil ditambahkan!";
-}
-
-// ==========================================
-// 5. HAPUS DATA HONOR
-// ==========================================
-function hapusHonor(rowIndex) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheetHonor = ss.getSheetByName(CONFIG.SHEET_HONOR);
-  var row = parseInt(rowIndex);
-  if (sheetHonor && row > 1) {
-    sheetHonor.deleteRow(row);
-    invalidateGuruCache();
-    return "✅ Data Honor berhasil dihapus!";
-  }
-  return "❌ Gagal menghapus data honor.";
-}

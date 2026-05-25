@@ -126,7 +126,7 @@ function switchView(viewName) {
   hitungCheckedSiswa();
   hitungCheckedPembayaran();
   // Lazy load — fetch hanya saat seksi pertama kali dibuka
-  if ((viewName === 'data-guru' || viewName === 'honor-guru') && !guruDataLoaded) {
+  if ((viewName === 'data-guru') && !guruDataLoaded) {
     fetchGuruData();
   }
   if (viewName === 'schedule') {
@@ -754,6 +754,15 @@ function getRoomColor(room) {
 // ==========================================
 // CALENDAR — helper minggu
 // ==========================================
+
+// Helper: convert Date ke string YYYY-MM-DD pakai timezone LOCAL (bukan UTC) — fix bug tanggal mundur 1 hari
+function toLocalDateStr(date) {
+  let y = date.getFullYear();
+  let m = String(date.getMonth() + 1).padStart(2, '0');
+  let d = String(date.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d;
+}
+
 function getWeekStart(date) {
   let d   = new Date(date);
   let day = d.getDay();                         // 0=Min,1=Sen,...6=Sab
@@ -817,7 +826,7 @@ function renderCalendar() {
                         border-bottom:2px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,0.06);">`;
   html += `<div style="width:${gut}px;flex-shrink:0;background:#f8fafc;"></div>`;
   weekDates.forEach((date,i) => {
-    let ds      = date.toISOString().split('T')[0];
+    let ds      = toLocalDateStr(date);
     let isToday = ds === today;
     html += `<div style="flex:1;min-width:${colW}px;text-align:center;padding:8px 4px 6px;
                           border-left:1px solid #e2e8f0;background:${isToday?'#f0f4ff':'#f8fafc'};">
@@ -849,7 +858,7 @@ function renderCalendar() {
 
   // ── 7 kolom hari ──
   weekDates.forEach((date, dayIdx) => {
-    let ds      = date.toISOString().split('T')[0];
+    let ds      = toLocalDateStr(date);
     let isToday = ds === today;
     let daySched = rawSchedule.filter(s => s.tgl && s.tgl.split('T')[0] === ds);
 
@@ -917,7 +926,7 @@ function renderCalendar() {
 
   // Auto-scroll ke jam sekarang
   let g = document.getElementById('calendarGrid');
-  let inWeek = weekDates.some(d => d.toISOString().split('T')[0] === today);
+  let inWeek = weekDates.some(d => toLocalDateStr(d) === today);
   setTimeout(() => {
     g.scrollTop = (inWeek && now.getHours() >= CAL_START_HOUR)
       ? Math.max(0, (now.getHours()-CAL_START_HOUR-1)*CAL_HOUR_PX)
@@ -931,18 +940,15 @@ function renderCalendar() {
 function onCalSlotClick(event, dateStr, hour, minute) {
   event.stopPropagation();
 
-  let jamMulai    = String(hour).padStart(2,'0') + ':' + String(minute).padStart(2,'0');
-  let endH        = minute === 30 ? hour+1 : hour;
-  let endM        = minute === 30 ? 0 : 30;
+  let jamMulai = String(hour).padStart(2,'0') + ':' + String(minute).padStart(2,'0');
+  // Default durasi: 2 JAM
+  let endH = hour + 2;
+  let endM = minute;
   if (endH > 23) { endH = 23; endM = 59; }
   let jamBerakhir = String(endH).padStart(2,'0') + ':' + String(endM).padStart(2,'0');
 
   calPreviewInfo = { dateStr, jamMulai, jamBerakhir };
-
-  // Tampilkan preview block di slot tersebut
   showPreviewBlock(event.currentTarget, hour, minute, endH, endM);
-
-  // Tampilkan quick popup
   showQuickPopup(event, dateStr, jamMulai, jamBerakhir);
 }
 
@@ -982,26 +988,36 @@ function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
   document.getElementById('qpJamBerakhir').value = jamBerakhir;
   onQpTimeChange();
 
-  // Ruangan (datalist dari calendarRooms)
-  document.getElementById('qpRuanganOptions').innerHTML = calendarRooms.map(r=>`<option value="${r}">`).join('');
-  document.getElementById('qpRuangan').value = '';
+  // Ruangan SELECT (dari master data)
+  let qpR = document.getElementById('qpRuangan');
+  qpR.innerHTML = '<option value="">-- Pilih Ruangan --</option>' +
+    rawRuangan.map(r=>`<option value="${r.ruangan}">${r.ruangan}</option>`).join('');
 
-  // Kelas dropdown
+  // Kelas SELECT
+  let qpK = document.getElementById('qpKelas');
   let kHtml = '<option value="">-- Pilih Kelas --</option>';
   jenjangSistem.forEach(j => j.daftar.forEach(k => { kHtml += `<option value="${k}">${k}</option>`; }));
-  document.getElementById('qpKelas').innerHTML = kHtml;
+  qpK.innerHTML = kHtml;
 
-  // Guru datalist
-  document.getElementById('qpGuruOptions').innerHTML = document.getElementById('sGuruOptions')?.innerHTML || '';
+  // Mapel SELECT — populate dari master data (semua mapel dulu, akan di-filter saat kelas dipilih)
+  let qpM = document.getElementById('qpMapel');
+  let uniqueMapel = [...new Set(rawMapel.map(m=>m.mapel))];
+  qpM.innerHTML = '<option value="">-- Pilih Mata Pelajaran --</option>' +
+    uniqueMapel.map(m=>`<option value="${m}">${m}</option>`).join('');
 
-  // Mapel datalist (dari jadwal + dari guru)
-  let mapels = [...new Set([...rawSchedule.map(s=>s.mapel), ...rawGuru.map(g=>g.mapel)].filter(Boolean))];
-  document.getElementById('qpMapelOptions').innerHTML = mapels.map(m=>`<option value="${m}">`).join('');
+  // Guru SELECT
+  let qpG = document.getElementById('qpGuru');
+  let seen = new Set();
+  let gHtml = '<option value="">-- Pilih Guru --</option>';
+  rawGuru.forEach(g => {
+    if (!seen.has(g.id)) { seen.add(g.id); gHtml += `<option value="${g.id} - ${g.nama}">${g.id} - ${g.nama}</option>`; }
+  });
+  qpG.innerHTML = gHtml;
 
   // Reset fields
-  document.getElementById('qpMapel').value        = '';
-  document.getElementById('qpGuru').value         = '';
-  document.getElementById('qpNamaGuru').value     = '';
+  document.getElementById('qpMapel').value    = '';
+  document.getElementById('qpGuru').value     = '';
+  document.getElementById('qpNamaGuru').value = '';
   document.getElementById('qpRecurring').checked  = false;
   document.getElementById('qpRecurringWrapper').style.display = 'none';
   document.getElementById('qpRecurringInfo').innerText = '';
@@ -1010,7 +1026,7 @@ function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
   // Set default tanggal "sampai" = 1 bulan ke depan
   let until = new Date(dateStr + 'T12:00:00');
   until.setMonth(until.getMonth() + 1);
-  document.getElementById('qpUntilDate').value = until.toISOString().split('T')[0];
+  document.getElementById('qpUntilDate').value = toLocalDateStr(until);
 
   // Posisi popup dekat klik, hindari keluar viewport
   let rect = event.target.getBoundingClientRect();
@@ -1077,7 +1093,7 @@ function getRecurringDates(startDate, untilDate) {
   let cur   = new Date(startDate + 'T12:00:00');
   let end   = new Date(untilDate  + 'T12:00:00');
   while (cur <= end) {
-    dates.push(cur.toISOString().split('T')[0]);
+    dates.push(toLocalDateStr(cur));
     cur.setDate(cur.getDate() + 7);
   }
   return dates;
@@ -1135,10 +1151,11 @@ function moreOptionsQuickPopup() {
   document.getElementById('sTanggal').value     = calPreviewInfo.dateStr;
   document.getElementById('sJamMulai').value    = mulai  || calPreviewInfo.jamMulai;
   document.getElementById('sJamBerakhir').value = akhir  || calPreviewInfo.jamBerakhir;
-  if (ruangan) document.getElementById('sRuangan').value   = ruangan;
-  if (kelas)   document.getElementById('sKelas').value     = kelas;
-  if (mapel)   document.getElementById('sMapel').value     = mapel;
-  if (guru)    document.getElementById('sGuruSearch').value= guru;
+  // Set kelas dulu, lalu trigger filter mapel
+  if (kelas) { document.getElementById('sKelas').value = kelas; onScheduleKelasChange(); }
+  if (mapel)   setSelectValueSafe('sMapel',      mapel);
+  if (ruangan) setSelectValueSafe('sRuangan',    ruangan);
+  if (guru)    setSelectValueSafe('sGuruSearch', guru);
   hitungDurasi();
   autoFillHonorSesi();
   initModalSchedule();
@@ -1221,11 +1238,13 @@ function simpanQuickPopup() {
       return;
     }
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (idx+1) + '/' + dates.length;
+    var tipeEl = document.querySelector('input[name="qpTipeSesi"]:checked');
     var payload = {
       rowIndex: '', tgl: dates[idx],
       jamMulai: mulai, jamBerakhir: akhir,
       durasi: hitungDurasiStr(mulai, akhir),
-      ruangan: ruangan, kelas: kelas, mapel: mapel, idGuru: idGuru, namaGuru: namaGuru
+      ruangan: ruangan, kelas: kelas, mapel: mapel, idGuru: idGuru, namaGuru: namaGuru,
+      tipeSesi: tipeEl ? tipeEl.value : 'Offline'
     };
     google.script.run
       .withSuccessHandler(function(res) { if (res.includes('\u2705')) saved++; else failed++; simpanSatuPerSatu(idx + 1); })
@@ -1424,18 +1443,37 @@ function fetchMasterData(callback) {
 
 // Update semua datalist & select yang butuh mapel/ruangan
 function updateMasterDataLists() {
-  // ── DATALIST MAPEL ──
-  // Unique mapel names (tanpa duplikat)
+  // ── SELECT MATA PELAJARAN (semua mapel unik, untuk form yang tidak filter by kelas) ──
   let uniqueMapel = [...new Set(rawMapel.map(m => m.mapel))];
-  let mapelOpts   = uniqueMapel.map(m => `<option value="${m}">`).join('');
-  ['sMapelOptions','qpMapelOptions','hMapelOptions','gMapelOptions'].forEach(id => {
-    let el = document.getElementById(id); if (el) el.innerHTML = mapelOpts;
+  // hMapel & gMapel: tampilkan semua mapel (tidak filter)
+  ['hMapel','gMapel'].forEach(id => {
+    let el = document.getElementById(id);
+    if (el) {
+      let cur = el.value;
+      el.innerHTML = '<option value="">-- Pilih Mata Pelajaran --</option>' +
+        uniqueMapel.map(m => `<option value="${m}">${m}</option>`).join('');
+      if (cur) setSelectValueSafe(id, cur);
+    }
+  });
+  // sMapel & qpMapel: akan di-filter by kelas saat onScheduleKelasChange/onQpKelasChange
+  // tetapi default: tampilkan semua dulu
+  ['sMapel','qpMapel'].forEach(id => {
+    let el = document.getElementById(id);
+    if (el && el.options.length <= 1) {
+      el.innerHTML = '<option value="">-- Pilih Mata Pelajaran --</option>' +
+        uniqueMapel.map(m => `<option value="${m}">${m}</option>`).join('');
+    }
   });
 
-  // ── DATALIST RUANGAN ──
-  let ruanganOpts = rawRuangan.map(r => `<option value="${r.ruangan}">`).join('');
-  ['sRuanganOptions','qpRuanganOptions'].forEach(id => {
-    let el = document.getElementById(id); if (el) el.innerHTML = ruanganOpts;
+  // ── SELECT RUANGAN ──
+  ['sRuangan','qpRuangan'].forEach(id => {
+    let el = document.getElementById(id);
+    if (el) {
+      let cur = el.value;
+      el.innerHTML = '<option value="">-- Pilih Ruangan --</option>' +
+        rawRuangan.map(r => `<option value="${r.ruangan}">${r.ruangan}</option>`).join('');
+      if (cur) setSelectValueSafe(id, cur);
+    }
   });
 
   // ── Filter kelas di section Data Mata Pelajaran ──
@@ -1458,18 +1496,28 @@ function getMapelByKelas(kelas) {
 }
 
 function onScheduleKelasChange() {
-  let kelas   = document.getElementById('sKelas').value;
-  let mapels  = getMapelByKelas(kelas);
-  let el      = document.getElementById('sMapelOptions');
-  if (el) el.innerHTML = mapels.map(m => `<option value="${m}">`).join('');
+  let kelas  = document.getElementById('sKelas').value;
+  let mapels = getMapelByKelas(kelas);
+  let el     = document.getElementById('sMapel');
+  if (el) {
+    let cur = el.value;
+    el.innerHTML = '<option value="">-- Pilih Mata Pelajaran --</option>' +
+      mapels.map(m => `<option value="${m}">${m}</option>`).join('');
+    if (cur && mapels.includes(cur)) el.value = cur;
+  }
   autoFillHonorSesi();
 }
 
 function onQpKelasChange() {
   let kelas  = document.getElementById('qpKelas').value;
   let mapels = getMapelByKelas(kelas);
-  let el     = document.getElementById('qpMapelOptions');
-  if (el) el.innerHTML = mapels.map(m => `<option value="${m}">`).join('');
+  let el     = document.getElementById('qpMapel');
+  if (el) {
+    let cur = el.value;
+    el.innerHTML = '<option value="">-- Pilih Mata Pelajaran --</option>' +
+      mapels.map(m => `<option value="${m}">${m}</option>`).join('');
+    if (cur && mapels.includes(cur)) el.value = cur;
+  }
   cekKonflikQuickPopup();
 }
 
@@ -1505,19 +1553,23 @@ function renderTabelMapel() {
 
   let html = '';
   filteredMapelData.slice(start, end).forEach(m => {
+    let offRp = (m.honorOffline||0).toLocaleString('id-ID');
+    let onRp  = (m.honorOnline ||0).toLocaleString('id-ID');
     html += `<tr>
       <td><strong>${m.mapel}</strong></td>
       <td><span class="badge bg-secondary">${m.kelas}</span></td>
+      <td class="text-end small fw-bold text-success">Rp ${offRp}</td>
+      <td class="text-end small fw-bold text-info">Rp ${onRp}</td>
       <td class="text-center">
         <div class="d-flex gap-1 justify-content-center">
           <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditMapel(${m.rowIndex})"><i class="fas fa-edit me-1"></i>Edit</button>
-          <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusMapel(${m.rowIndex},'${m.mapel.replace(/'/g,"\'")} (${m.kelas})')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
+          <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusMapel(${m.rowIndex},'${m.mapel.replace(/'/g,"\\'")} (${m.kelas})')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
         </div>
       </td>
     </tr>`;
   });
   document.getElementById('tabelMapelBody').innerHTML =
-    html || '<tr><td colspan="3" class="text-center text-muted py-4">Belum ada data mata pelajaran</td></tr>';
+    html || '<tr><td colspan="5" class="text-center text-muted py-4">Belum ada data mata pelajaran</td></tr>';
 }
 
 // ── Modal Mata Pelajaran ──
@@ -1536,6 +1588,8 @@ function siapkanEditMapel(rowIndex) {
   document.getElementById('mpNama').value            = m.mapel;
   populateKelasSelect('mpKelas');
   document.getElementById('mpKelas').value = m.kelas;
+  document.getElementById('mpHonorOffline').value = (m.honorOffline||0).toLocaleString('id-ID');
+  document.getElementById('mpHonorOnline').value  = (m.honorOnline ||0).toLocaleString('id-ID');
   document.getElementById('txtJudulFormMapel').innerText = `Edit Mata Pelajaran`;
   document.getElementById('btnSimpanMapel').innerText    = 'Update';
   document.getElementById('btnSimpanMapel').className    = 'btn btn-warning w-100 fw-bold py-2';
@@ -1551,11 +1605,13 @@ function resetFormMapelKeDefault() {
 }
 function submitMapel() {
   let payload = {
-    rowIndex: document.getElementById('mpRowIndexHidden').value,
-    mapel   : document.getElementById('mpNama').value.trim(),
-    kelas   : document.getElementById('mpKelas').value
+    rowIndex     : document.getElementById('mpRowIndexHidden').value,
+    mapel        : document.getElementById('mpNama').value.trim(),
+    kelas        : document.getElementById('mpKelas').value,
+    honorOffline : getRawNumber('mpHonorOffline'),
+    honorOnline  : getRawNumber('mpHonorOnline')
   };
-  if (!payload.mapel || !payload.kelas) { tampilkanToast('Lengkapi semua field!','warning'); return; }
+  if (!payload.mapel || !payload.kelas) { tampilkanToast('Mapel & Kelas wajib diisi!','warning'); return; }
   setTombolLoading('btnSimpanMapel', true, 'Menyimpan...');
   tampilkanLoading('Menyimpan...');
   google.script.run
@@ -1710,7 +1766,7 @@ function siapkanEditGuru(rowIndex) {
   document.getElementById('gNamaBaruWrapper').classList.remove('d-none');
   document.getElementById('gNamaBaru').value = g.nama;
   document.getElementById('gRowIndexHidden').value = g.rowIndex;
-  document.getElementById('gMapel').value = g.mapel;
+  setSelectValueSafe('gMapel', g.mapel);
   let checkedArr = g.kelas.split(',').map(k => k.trim()).filter(k => k);
   generateKelasCheckboxesGuru(checkedArr);
   document.getElementById('txtJudulFormGuru').innerText = 'Edit Mapel Guru (' + g.id + ')';
@@ -1794,8 +1850,8 @@ function siapkanEditHonor(rowIndex) {
   let h = rawHonor.find(x => x.rowIndex === rowIndex);
   if (!h) return;
   document.getElementById('hRowIndexHidden').value = h.rowIndex;
-  document.getElementById('hMapel').value = h.mapel;
   populateKelasSelect('hKelas');
+  setSelectValueSafe('hMapel', h.mapel);
   document.getElementById('hKelas').value = h.kelas;
   document.getElementById('hHonor').value = h.honorPerPertemuan.toLocaleString('id-ID');
   document.getElementById('txtJudulFormHonor').innerText = 'Edit Honor (' + h.mapel + ' \u2014 ' + h.kelas + ')';
@@ -1865,11 +1921,18 @@ function siapkanEditSchedule(rowIndex) {
   document.getElementById('sJamMulai').value = s.jamMulai || '';
   document.getElementById('sJamBerakhir').value = s.jamBerakhir || '';
   document.getElementById('sDurasi').value = s.durasi || '';
-  document.getElementById('sRuangan').value = s.ruangan || '';
+  // Set kelas DULU, trigger filter mapel, baru set ruangan/mapel/guru via setSelectValueSafe
   document.getElementById('sKelas').value = s.kelas;
-  document.getElementById('sMapel').value = s.mapel;
-  document.getElementById('sGuruSearch').value = s.idGuru + ' - ' + s.namaGuru;
+  onScheduleKelasChange();
+  setSelectValueSafe('sMapel',      s.mapel);
+  setSelectValueSafe('sRuangan',    s.ruangan || '');
+  setSelectValueSafe('sGuruSearch', s.idGuru + ' - ' + s.namaGuru);
   document.getElementById('sNamaGuru').value = s.namaGuru;
+  // Set tipe sesi (default Offline kalau data lama belum ada field-nya)
+  let tipe = s.tipeSesi || 'Offline';
+  let tipeId = (tipe === 'Online') ? 'sTipeOnline' : 'sTipeOffline';
+  let tipeEl = document.getElementById(tipeId);
+  if (tipeEl) tipeEl.checked = true;
   document.getElementById('txtJudulFormSchedule').innerText = 'Edit Jadwal (' + s.mapel + ' \u00b7 ' + s.kelas + ')';
   document.getElementById('btnSimpanSchedule').innerText = 'Update Jadwal';
   document.getElementById('btnSimpanSchedule').className = 'btn btn-warning w-100 fw-bold py-2';
@@ -1881,6 +1944,8 @@ function resetFormScheduleKeDefault() {
   document.getElementById('formSchedule').reset();
   document.getElementById('sRowIndexHidden').value = '';
   document.getElementById('sHonorInfo').innerHTML = '-';
+  // Reset tipe ke Offline
+  let tOff = document.getElementById('sTipeOffline'); if (tOff) tOff.checked = true;
   document.getElementById('txtJudulFormSchedule').innerText = 'Tambah Jadwal';
   document.getElementById('btnSimpanSchedule').innerText = 'Simpan Jadwal';
   document.getElementById('btnSimpanSchedule').className = 'btn btn-success w-100 fw-bold py-2';
@@ -1909,17 +1974,24 @@ function onGuruSearchChange() {
 function autoFillHonorSesi() {
   let mapel = document.getElementById('sMapel').value.trim();
   let kelas = document.getElementById('sKelas').value.trim();
+  let tipeEl = document.querySelector('input[name="sTipeSesi"]:checked');
+  let tipe   = tipeEl ? tipeEl.value : 'Offline';
   let el = document.getElementById('sHonorInfo');
   if (!mapel || !kelas) { el.innerHTML = '-'; return; }
-  let entry = rawHonor.find(h => h.mapel.toLowerCase() === mapel.toLowerCase() && h.kelas.toLowerCase() === kelas.toLowerCase());
+  let entry = rawMapel.find(m => m.mapel.toLowerCase() === mapel.toLowerCase() && m.kelas.toLowerCase() === kelas.toLowerCase());
   if (entry) {
-    el.innerHTML = '<span class="fw-bold text-success">Rp ' + entry.honorPerPertemuan.toLocaleString('id-ID') + '</span> <span class="text-muted">/ sesi</span>';
+    let honor = (tipe === 'Online') ? entry.honorOnline : entry.honorOffline;
+    let lainHonor = (tipe === 'Online') ? entry.honorOffline : entry.honorOnline;
+    let lainLabel = (tipe === 'Online') ? 'Offline' : 'Online';
+    el.innerHTML = '<span class="fw-bold text-success">Rp ' + honor.toLocaleString('id-ID') + '</span> <span class="text-muted">/ sesi (' + tipe + ')</span>' +
+                   '<br><span class="text-muted small">' + lainLabel + ': Rp ' + lainHonor.toLocaleString('id-ID') + '</span>';
   } else {
-    el.innerHTML = '<span class="text-warning small fw-bold">\u26a0\ufe0f Honor belum diatur untuk kombinasi ini</span>';
+    el.innerHTML = '<span class="text-warning small fw-bold">\u26a0\ufe0f Mata pelajaran/kelas ini belum diatur honornya</span>';
   }
 }
 function submitSchedule() {
   let idGuru = document.getElementById('sGuruSearch').value.split(' - ')[0].trim();
+  let tipeEl = document.querySelector('input[name="sTipeSesi"]:checked');
   let payload = {
     rowIndex: document.getElementById('sRowIndexHidden').value,
     tgl: document.getElementById('sTanggal').value,
@@ -1930,7 +2002,8 @@ function submitSchedule() {
     kelas: document.getElementById('sKelas').value,
     mapel: document.getElementById('sMapel').value,
     idGuru: idGuru,
-    namaGuru: document.getElementById('sNamaGuru').value
+    namaGuru: document.getElementById('sNamaGuru').value,
+    tipeSesi: tipeEl ? tipeEl.value : 'Offline'
   };
   if (!payload.tgl || !payload.kelas || !payload.mapel || !payload.idGuru) {
     tampilkanToast('Tanggal, Kelas, Mata Pelajaran, dan Guru wajib diisi!', 'warning'); return;
@@ -2010,6 +2083,228 @@ function moveRoom(idx, dir) {
   calendarRooms[idx] = calendarRooms[t];
   calendarRooms[t] = tmp;
   renderRuanganList();
+}
+
+
+
+// ==========================================
+// HELPER & MISSING RENDER FUNCTIONS — restored
+// ==========================================
+
+// Populate dropdown kelas (untuk modal honor, mapel, etc.)
+function populateKelasSelect(selectId) {
+  let html = '<option value="">-- Pilih Kelas --</option>';
+  jenjangSistem.forEach(j => j.daftar.forEach(cls => { html += `<option value="${cls}">${cls}</option>`; }));
+  let el = document.getElementById(selectId);
+  if (el) el.innerHTML = html;
+}
+
+// Generate kelas checkboxes untuk form guru
+function generateKelasCheckboxesGuru(checkedArr) {
+  checkedArr = checkedArr || [];
+  let html = '';
+  jenjangSistem.forEach(jenjang => {
+    html += `<div class="mb-3">
+      <span class="small fw-bold text-uppercase" style="color:#64748b;letter-spacing:1px;">${jenjang.nama}</span>
+      <div class="d-flex flex-wrap gap-2 mt-2">`;
+    jenjang.daftar.forEach(kelas => {
+      let id  = 'gChk-' + kelas.replace(/\s/g, '-');
+      let on  = checkedArr.includes(kelas);
+      let bg     = on ? '#3b82f6' : '#f8fafc';
+      let color  = on ? '#fff'    : '#475569';
+      let border = on ? '#3b82f6' : '#cbd5e1';
+      html += `
+        <input type="checkbox" class="chk-guru-kelas" value="${kelas}" id="${id}" ${on?'checked':''} style="display:none;">
+        <label for="${id}" onclick="toggleKelasPill(this)"
+               class="kelas-pill" data-on="${on}"
+               style="display:inline-block;padding:6px 14px;border-radius:20px;cursor:pointer;
+                      background:${bg};color:${color};border:1.5px solid ${border};font-size:12px;
+                      font-weight:600;transition:all .15s;user-select:none;">
+          ${kelas}
+        </label>`;
+    });
+    html += `</div></div>`;
+  });
+  document.getElementById('gKelasCheckboxContainer').innerHTML = html;
+}
+
+// Handler untuk toggle pill kelas (klik pill = toggle checkbox tersembunyi + ubah warna)
+function toggleKelasPill(labelEl) {
+  let cb = document.getElementById(labelEl.htmlFor);
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  if (cb.checked) {
+    labelEl.style.background = '#3b82f6';
+    labelEl.style.color      = '#fff';
+    labelEl.style.borderColor= '#3b82f6';
+    labelEl.dataset.on       = 'true';
+  } else {
+    labelEl.style.background = '#f8fafc';
+    labelEl.style.color      = '#475569';
+    labelEl.style.borderColor= '#cbd5e1';
+    labelEl.dataset.on       = 'false';
+  }
+}
+
+// Update datalist guru untuk autocomplete
+function updateGuruDatalistOptions() {
+  let seen = new Set();
+  let opts = '<option value="">-- Pilih Guru --</option>';
+  rawGuru.forEach(g => {
+    if (!seen.has(g.id)) {
+      seen.add(g.id);
+      opts += `<option value="${g.id} - ${g.nama}">${g.id} - ${g.nama}</option>`;
+    }
+  });
+  ['sGuruSearch','gGuruSearch','qpGuru'].forEach(id => {
+    let el = document.getElementById(id);
+    if (el) {
+      let cur = el.value;
+      el.innerHTML = opts;
+      if (cur) setSelectValueSafe(id, cur);
+    }
+  });
+}
+
+// Helper: set nilai select dengan aman; kalau opsi belum ada, tambahkan (untuk data legacy)
+function setSelectValueSafe(selectId, value) {
+  let el = document.getElementById(selectId);
+  if (!el || !value) return;
+  let found = false;
+  for (let opt of el.options) { if (opt.value === value) { found = true; break; } }
+  if (!found) {
+    let opt = document.createElement('option');
+    opt.value = value;
+    opt.text  = value + ' (data lama)';
+    el.add(opt);
+  }
+  el.value = value;
+}
+
+// ── TABEL DATA GURU (grouped by ID) ──
+function resetGuruPageAndFilter() { currentPageGuru = 1; applyFiltersGuru(); }
+function pindahHalamanGuru(arah)  { currentPageGuru += arah; renderTabelGuru(); }
+
+function applyFiltersGuru() {
+  let fId    = document.getElementById('fgId').value.toLowerCase();
+  let fNama  = document.getElementById('fgNama').value.toLowerCase();
+  let fMapel = document.getElementById('fgMapel').value.toLowerCase();
+  filteredGuruData = rawGuru.filter(g =>
+    (g.id   ||'').toLowerCase().includes(fId)   &&
+    (g.nama ||'').toLowerCase().includes(fNama) &&
+    (g.mapel||'').toLowerCase().includes(fMapel)
+  );
+  renderTabelGuru();
+}
+
+function renderTabelGuru() {
+  let limitVal  = document.getElementById('limitGuru').value;
+  let totalData = filteredGuruData.length;
+  let startIdx = 0, endIdx = totalData, totalPages = 1;
+  if (limitVal !== 'all') {
+    let limit = parseInt(limitVal);
+    totalPages = Math.ceil(totalData / limit) || 1;
+    if (currentPageGuru < 1) currentPageGuru = 1;
+    if (currentPageGuru > totalPages) currentPageGuru = totalPages;
+    startIdx = (currentPageGuru - 1) * limit;
+    endIdx   = Math.min(startIdx + limit, totalData);
+    document.getElementById('btnPrevGuru').disabled = (currentPageGuru === 1);
+    document.getElementById('btnNextGuru').disabled = (currentPageGuru === totalPages);
+    document.getElementById('txtPageGuru').innerText = `Halaman ${currentPageGuru} dari ${totalPages}`;
+  } else {
+    document.getElementById('btnPrevGuru').disabled = true;
+    document.getElementById('btnNextGuru').disabled = true;
+    document.getElementById('txtPageGuru').innerText = 'Menampilkan Semua';
+  }
+  document.getElementById('infoGuruCount').innerText = `Menampilkan ${totalData > 0 ? startIdx+1 : 0}-${endIdx} dari ${totalData} data`;
+
+  let pageData = filteredGuruData.slice(startIdx, endIdx);
+  // Group by teacher ID
+  let grouped = {};
+  let order   = [];
+  pageData.forEach(g => {
+    if (!grouped[g.id]) { grouped[g.id] = []; order.push(g.id); }
+    grouped[g.id].push(g);
+  });
+
+  let html = '';
+  order.forEach(id => {
+    let rows = grouped[id];
+    rows.forEach((g, idx) => {
+      html += `<tr>`;
+      if (idx === 0) {
+        html += `<td rowspan="${rows.length}" class="align-middle"><span class="siswa-id-badge">${g.id}</span></td>`;
+        html += `<td rowspan="${rows.length}" class="align-middle fw-bold">${g.nama}</td>`;
+      }
+      html += `<td class="align-middle">${g.mapel}</td>`;
+      let kelasBadges = g.kelas.split(',').map(k => k.trim()).filter(k => k)
+        .map(k => `<span class="badge bg-light text-dark border me-1 mb-1">${k}</span>`).join('');
+      html += `<td class="align-middle">${kelasBadges}</td>`;
+      let namaEsc = g.nama.replace(/'/g, "\\'");
+      html += `<td class="text-center align-middle">
+        <div class="d-flex gap-1 justify-content-center">
+          <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditGuru(${g.rowIndex})"><i class="fas fa-edit me-1"></i>Edit</button>
+          <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusGuru(${g.rowIndex},'${namaEsc} — ${g.mapel}')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
+        </div>
+      </td></tr>`;
+    });
+  });
+  document.getElementById('tabelGuruBody').innerHTML = html ||
+    '<tr><td colspan="5" class="text-center text-muted py-4">Tidak ada data guru</td></tr>';
+}
+
+// ── TABEL HONOR ──
+function renderTabelHonor() {
+  let html = '';
+  rawHonor.forEach(h => {
+    html += `<tr>
+      <td><strong>${h.mapel}</strong></td>
+      <td><span class="badge bg-secondary">${h.kelas}</span></td>
+      <td class="fw-bold text-success">Rp ${h.honorPerPertemuan.toLocaleString('id-ID')}</td>
+      <td class="text-center">
+        <div class="d-flex gap-1 justify-content-center">
+          <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditHonor(${h.rowIndex})"><i class="fas fa-edit me-1"></i>Edit</button>
+          <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusHonor(${h.rowIndex},'${h.mapel} - ${h.kelas}')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
+        </div>
+      </td>
+    </tr>`;
+  });
+  document.getElementById('tabelHonorBody').innerHTML = html ||
+    '<tr><td colspan="4" class="text-center text-muted py-4">Tidak ada data honor</td></tr>';
+}
+
+// ── SCHEDULE FETCH ──
+function fetchScheduleData(callback) {
+  tampilkanLoading('Mengambil data jadwal...');
+  google.script.run
+    .withSuccessHandler(function(data) {
+      sembunyikanLoading();
+      rawSchedule        = data || [];
+      scheduleDataLoaded = true;
+      extractRoomsFromSchedule();
+      renderCalendar();
+      if (callback) callback();
+    })
+    .withFailureHandler(function(err) {
+      sembunyikanLoading();
+      tampilkanToast('\u274c Error data jadwal: ' + err.message, 'error');
+    })
+    .getScheduleData();
+}
+
+// ── CALENDAR HELPERS ──
+function onCalBlockClick(rowIndex) {
+  siapkanEditSchedule(rowIndex);
+}
+
+function getCalBlockPos(jamMulai, jamBerakhir) {
+  if (!jamMulai || !jamBerakhir) return null;
+  let [h1,m1] = jamMulai.split(':').map(Number);
+  let [h2,m2] = jamBerakhir.split(':').map(Number);
+  if (isNaN(h1) || isNaN(h2)) return null;
+  let sm = (h1-CAL_START_HOUR)*60+m1;
+  let em = (h2-CAL_START_HOUR)*60+m2;
+  return { t: sm/60*CAL_HOUR_PX, h: Math.max((em-sm)/60*CAL_HOUR_PX, 16) };
 }
 
 
