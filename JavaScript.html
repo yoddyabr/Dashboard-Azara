@@ -533,18 +533,47 @@ function eksekusiBulkHapusPembayaran() {
 // ==========================================
 function generatePeriodeCheckboxes() {
   let tahunSekarang = new Date().getFullYear();
-  let html = `<div class="form-check form-check-inline mb-2 p-1 rounded" style="width: 140px; background-color: #e8f5e9; border: 1px dashed #2e7d32;">
-    <input class="form-check-input chk-periode ms-1" type="checkbox" value="Biaya Registrasi" id="chk-registrasi">
-    <label class="form-check-label small fw-bold text-success" for="chk-registrasi">Biaya Registrasi</label>
-  </div><div class="w-100 mb-1"></div>`;
+  // Biaya Registrasi (highlight beda warna - hijau)
+  let html = `
+    <input type="checkbox" class="chk-periode" value="Biaya Registrasi" id="chk-registrasi" style="position:absolute;left:-9999px;">
+    <span class="periode-pill" data-target="chk-registrasi" onclick="togglePeriodePill(this,'green')" data-on="false"
+          style="display:inline-block;padding:6px 14px;border-radius:20px;cursor:pointer;margin-right:6px;margin-bottom:8px;
+                 background:#f0fdf4;color:#15803d;border:1.5px dashed #22c55e;font-size:12px;font-weight:700;transition:all .15s;user-select:none;">
+      <i class="fas fa-money-check-alt me-1"></i>Biaya Registrasi
+    </span>
+    <div class="w-100 mb-1"></div>`;
+
   let tahunMulai = Math.min(2026, tahunSekarang);
   for (let t = tahunMulai; t <= tahunSekarang + 1; t++) {
     namaBulanArr.forEach((b, index) => {
       let valueText = b + " " + t;
-      html += `<div class="form-check form-check-inline mb-2" style="width: 130px;"><input class="form-check-input chk-periode" type="checkbox" value="${valueText}" id="chk-${index}-${t}"><label class="form-check-label small" for="chk-${index}-${t}">${valueText}</label></div>`;
+      let id = `chk-${index}-${t}`;
+      html += `
+        <input type="checkbox" class="chk-periode" value="${valueText}" id="${id}" style="position:absolute;left:-9999px;">
+        <span class="periode-pill" data-target="${id}" onclick="togglePeriodePill(this,'blue')" data-on="false"
+              style="display:inline-block;padding:5px 12px;border-radius:20px;cursor:pointer;margin-right:6px;margin-bottom:6px;
+                     background:#f8fafc;color:#475569;border:1.5px solid #cbd5e1;font-size:12px;font-weight:600;transition:all .15s;user-select:none;">${valueText}</span>`;
     });
   }
   document.getElementById('periodeCheckboxContainer').innerHTML = html;
+}
+
+// Toggle periode pill dengan dua skema warna: blue (default) dan green (registrasi)
+function togglePeriodePill(spanEl, scheme) {
+  let cb = document.getElementById(spanEl.dataset.target);
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  if (scheme === 'green') {
+    spanEl.style.background  = cb.checked ? '#22c55e' : '#f0fdf4';
+    spanEl.style.color       = cb.checked ? '#fff'    : '#15803d';
+    spanEl.style.borderColor = '#22c55e';
+    spanEl.style.borderStyle = cb.checked ? 'solid' : 'dashed';
+  } else {
+    spanEl.style.background  = cb.checked ? '#3b82f6' : '#f8fafc';
+    spanEl.style.color       = cb.checked ? '#fff'    : '#475569';
+    spanEl.style.borderColor = cb.checked ? '#3b82f6' : '#cbd5e1';
+  }
+  spanEl.dataset.on = cb.checked ? 'true' : 'false';
 }
 function generateDropdownKelas() {
   let html = '<option value="">-- Pilih Kelas --</option>';
@@ -1234,7 +1263,8 @@ function simpanQuickPopup() {
         saved > 0 ? 'success' : 'error'
       );
       scheduleDataLoaded = false;
-      fetchScheduleData();
+      // Explicit refresh: fetch + render calendar
+      fetchScheduleData(function() { renderCalendar(); });
       return;
     }
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + (idx+1) + '/' + dates.length;
@@ -2008,6 +2038,34 @@ function submitSchedule() {
   if (!payload.tgl || !payload.kelas || !payload.mapel || !payload.idGuru) {
     tampilkanToast('Tanggal, Kelas, Mata Pelajaran, dan Guru wajib diisi!', 'warning'); return;
   }
+
+  // ── CEK KONFLIK ruangan/waktu sebelum simpan ──
+  let excludeRow = payload.rowIndex ? parseInt(payload.rowIndex) : null;
+  let konflik = cekKonflik(payload.ruangan, payload.tgl, payload.jamMulai, payload.jamBerakhir, excludeRow);
+  if (konflik.length > 0) {
+    let info = konflik.map(k => `"${k.mapel} ${k.kelas}" oleh ${k.namaGuru} (${k.jamMulai}-${k.jamBerakhir})`).join('\n');
+    if (!confirm('⚠️ KONFLIK JADWAL di ruangan "' + payload.ruangan + '"!\n\n' + info + '\n\nLanjutkan? Jadwal lama akan dihapus otomatis.')) return;
+    // Hapus jadwal konflik dulu, lalu lanjut simpan
+    let konflikRows = konflik.map(k => k.rowIndex);
+    let toDel = [...konflikRows];
+    let doSimpan = () => doSimpanSchedule(payload);
+    function hapusBerikutnya() {
+      if (toDel.length === 0) { doSimpan(); return; }
+      let row = toDel.shift();
+      google.script.run
+        .withSuccessHandler(() => { scheduleDataLoaded=false; hapusBerikutnya(); })
+        .withFailureHandler(() => hapusBerikutnya())
+        .hapusSchedule(row);
+    }
+    setTombolLoading('btnSimpanSchedule', true, 'Menghapus konflik...');
+    tampilkanLoading('Menghapus jadwal konflik...');
+    hapusBerikutnya();
+    return;
+  }
+  doSimpanSchedule(payload);
+}
+
+function doSimpanSchedule(payload) {
   setTombolLoading('btnSimpanSchedule', true, 'Menyimpan...');
   tampilkanLoading('Menyimpan jadwal...');
   google.script.run
@@ -2021,7 +2079,7 @@ function submitSchedule() {
         bsModalSchedule.hide();
         resetFormScheduleKeDefault();
         scheduleDataLoaded = false;
-        fetchScheduleData();
+        fetchScheduleData(function() { renderCalendar(); });
       }
     })
     .withFailureHandler(err => {
@@ -2108,42 +2166,35 @@ function generateKelasCheckboxesGuru(checkedArr) {
       <span class="small fw-bold text-uppercase" style="color:#64748b;letter-spacing:1px;">${jenjang.nama}</span>
       <div class="d-flex flex-wrap gap-2 mt-2">`;
     jenjang.daftar.forEach(kelas => {
-      let id  = 'gChk-' + kelas.replace(/\s/g, '-');
-      let on  = checkedArr.includes(kelas);
-      let bg     = on ? '#3b82f6' : '#f8fafc';
-      let color  = on ? '#fff'    : '#475569';
-      let border = on ? '#3b82f6' : '#cbd5e1';
+      let id = 'gChk-' + kelas.replace(/\s/g, '-');
+      let on = checkedArr.includes(kelas);
       html += `
-        <input type="checkbox" class="chk-guru-kelas" value="${kelas}" id="${id}" ${on?'checked':''} style="display:none;">
-        <label for="${id}" onclick="toggleKelasPill(this)"
-               class="kelas-pill" data-on="${on}"
-               style="display:inline-block;padding:6px 14px;border-radius:20px;cursor:pointer;
-                      background:${bg};color:${color};border:1.5px solid ${border};font-size:12px;
-                      font-weight:600;transition:all .15s;user-select:none;">
-          ${kelas}
-        </label>`;
+        <input type="checkbox" class="chk-guru-kelas" value="${kelas}" id="${id}" ${on?'checked':''} style="position:absolute;left:-9999px;">
+        <span class="kelas-pill" data-target="${id}" onclick="toggleKelasPill(this)" data-on="${on}"
+              style="display:inline-block;padding:6px 14px;border-radius:20px;cursor:pointer;
+                     background:${on?'#3b82f6':'#f8fafc'};color:${on?'#fff':'#475569'};
+                     border:1.5px solid ${on?'#3b82f6':'#cbd5e1'};font-size:12px;
+                     font-weight:600;transition:all .15s;user-select:none;">${kelas}</span>`;
     });
     html += `</div></div>`;
   });
   document.getElementById('gKelasCheckboxContainer').innerHTML = html;
 }
 
-// Handler untuk toggle pill kelas (klik pill = toggle checkbox tersembunyi + ubah warna)
-function toggleKelasPill(labelEl) {
-  let cb = document.getElementById(labelEl.htmlFor);
+// Handler universal untuk semua pill toggle: ambil checkbox dari data-target, flip, sync visual
+function toggleKelasPill(spanEl) {
+  let cb = document.getElementById(spanEl.dataset.target);
   if (!cb) return;
   cb.checked = !cb.checked;
-  if (cb.checked) {
-    labelEl.style.background = '#3b82f6';
-    labelEl.style.color      = '#fff';
-    labelEl.style.borderColor= '#3b82f6';
-    labelEl.dataset.on       = 'true';
-  } else {
-    labelEl.style.background = '#f8fafc';
-    labelEl.style.color      = '#475569';
-    labelEl.style.borderColor= '#cbd5e1';
-    labelEl.dataset.on       = 'false';
-  }
+  applyPillVisual(spanEl, cb.checked);
+}
+
+// Helper: sync visual pill berdasarkan state
+function applyPillVisual(el, isOn) {
+  el.style.background  = isOn ? '#3b82f6' : '#f8fafc';
+  el.style.color       = isOn ? '#fff'    : '#475569';
+  el.style.borderColor = isOn ? '#3b82f6' : '#cbd5e1';
+  el.dataset.on        = isOn ? 'true'    : 'false';
 }
 
 // Update datalist guru untuk autocomplete
