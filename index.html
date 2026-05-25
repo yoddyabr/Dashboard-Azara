@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+
+  <!-- LOADING OVERLAY -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">Memproses...</div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div class="toast-container-custom" id="toastContainer"></div>
+
+  <!-- MOBILE TOP NAV -->
+  <div class="mobile-top-nav">
+    <div class="logo-brand">
+      <div class="logo-icon-wrapper" style="transform: scale(0.85);"><i class="fas fa-lightbulb"></i></div>
+      <div class="logo-text-wrapper">
+        <span class="logo-text-top" style="font-size:16px;">azara</span>
+        <span class="logo-text-bottom" style="font-size:16px;">course</span>
+      </div>
+    </div>
+    <button class="btn btn-dark border-0 p-2" onclick="toggleMobileSidebar()"><i class="fas fa-bars fs-4 text-white"></i></button>
+  </div>
+
+  <!-- SIDEBAR OVERLAY (mobile) -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileSidebar()"></div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="mySidebar">
+    <div class="logo-container d-none d-md-flex">
+      <div class="logo-brand">
+        <div class="logo-icon-wrapper"><i class="fas fa-lightbulb"></i></div>
+        <div class="logo-text-wrapper">
+          <div class="logo-text-top">azara</div>
+          <div class="logo-text-bottom">course</div>
+        </div>
+      </div>
+      <button class="btn-toggle-sidebar" onclick="toggleSidebar()"><i class="fas fa-chevron-left" id="toggleIcon"></i></button>
+    </div>
+    <div class="sidebar-category-title">Utama</div>
+    <div class="sidebar-divider"></div>
+    <a href="#" onclick="switchViewMobile('dashboard')" id="nav-dashboard" class="active"><i class="fas fa-chart-line"></i> <span>Dashboard Overview</span></a>
+    <div class="sidebar-category-title">Database</div>
+    <div class="sidebar-divider"></div>
+    <a href="#" onclick="switchViewMobile('data-siswa')" id="nav-data-siswa"><i class="fas fa-users"></i> <span>Data Siswa</span></a>
+    <a href="#" onclick="switchViewMobile('data-pembayaran')" id="nav-data-pembayaran"><i class="fas fa-wallet"></i> <span>Data Pembayaran</span></a>
+    <div class="sidebar-category-title">Kepegawaian</div>
+    <div class="sidebar-divider"></div>
+    <a href="#" onclick="switchViewMobile('data-guru')" id="nav-data-guru"><i class="fas fa-chalkboard-teacher"></i> <span>Data Guru</span></a>
+    <a href="#" onclick="switchViewMobile('honor-guru')" id="nav-honor-guru"><i class="fas fa-money-bill-wave"></i> <span>Honor Guru</span></a>
+    <a href="#" onclick="switchViewMobile('schedule')" id="nav-schedule"><i class="fas fa-calendar-alt"></i> <span>Schedule</span></a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+
+    <!-- ===== SECTION: DASHBOARD ===== -->
+    <div id="section-dashboard" class="view-section active-section">
+      <div class="mb-4">
+        <h3 class="fw-bold m-0" style="color: #0f172a; letter-spacing: -0.75px;">Dashboard Overview</h3>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-4 d-flex flex-column gap-3">
+          <div class="bento-card metric-pemasukan flex-fill d-flex flex-column justify-content-center">
+            <h6 class="small text-muted fw-bold text-uppercase mb-2" style="letter-spacing: 0.8px; font-size: 11px;">Total Pemasukan</h6>
+            <h2 id="txtTotalOmset" class="text-omset-green m-0">Rp 0</h2>
+          </div>
+          <div class="bento-card flex-fill d-flex flex-column justify-content-center">
+            <h6 class="small text-muted fw-bold text-uppercase mb-2" style="letter-spacing: 0.8px; font-size: 11px;">Total Siswa Aktif</h6>
+            <h2 id="txtTotalSiswaAktif" class="text-student-blue m-0">0 Siswa</h2>
+          </div>
+        </div>
+        <div class="col-md-8">
+          <div class="bento-card h-100 d-flex flex-column justify-content-center">
+            <h6 class="fw-bold mb-4 small text-muted text-uppercase" style="letter-spacing: 0.8px; font-size: 11px;">Jumlah Siswa Aktif per Jenjang Kelas</h6>
+            <div id="kelasJenjangContainer" class="w-100"></div>
+          </div>
+        </div>
+      </div>
+      <div class="row mt-2">
+        <div class="col-12">
+          <div class="bento-card">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+              <h6 class="fw-bold m-0 small text-muted text-uppercase" style="letter-spacing: 0.8px; font-size: 11px;">Trending Realisasi Pembayaran</h6>
+              <div class="d-flex gap-2 align-items-center w-100 w-md-auto">
+                <input type="month" id="dashStart" class="form-control form-control-sm border shadow-sm" onchange="processDashboard()" style="padding: 6px 12px; border-radius: 8px; max-width: 140px; background: #ffffff;">
+                <span class="text-muted small fw-bold">to</span>
+                <input type="month" id="dashEnd" class="form-control form-control-sm border shadow-sm" onchange="processDashboard()" style="padding: 6px 12px; border-radius: 8px; max-width: 140px; background: #ffffff;">
+              </div>
+            </div>
+            <div style="position: relative; width: 100%; height: 280px;">
+              <canvas id="chartTren"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SECTION: DATA SISWA ===== -->
+    <div id="section-data-siswa" class="view-section">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold m-0" style="color: #0f172a; letter-spacing: -0.75px;">Master Data Siswa</h3>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-outline-primary fw-bold px-3 py-2" onclick="bukaModalNaikKelas()" style="border-radius: 10px;"><i class="fas fa-graduation-cap me-2"></i>Naik Kelas</button>
+          <button class="btn btn-primary fw-bold px-3 py-2" onclick="bukaModalTambahSiswa()" style="border-radius: 10px;"><i class="fas fa-user-plus me-2"></i>Tambah Siswa Baru</button>
+        </div>
+      </div>
+      <div id="bulkActionBarSiswa" class="bulk-action-bar mb-3">
+        <span class="fw-bold text-danger small"><i class="fas fa-check-square me-2"></i><span id="txtCountCheckedSiswa">0</span> Siswa terpilih</span>
+        <button class="btn btn-danger btn-sm fw-bold px-3" id="btnBulkHapusSiswa" onclick="eksekusiBulkHapusSiswa()"><i class="fas fa-trash-alt me-2"></i>Hapus Sekaligus</button>
+      </div>
+      <div class="bento-card">
+        <div class="row g-2">
+          <div class="col-6 col-md-2"><input type="text" class="form-control" id="fId" placeholder="ID Siswa" oninput="resetSiswaPageAndFilter()"></div>
+          <div class="col-6 col-md-3"><input type="text" class="form-control" id="fNama" placeholder="Nama" oninput="resetSiswaPageAndFilter()"></div>
+          <div class="col-6 col-md-2"><input type="text" class="form-control" id="fKelas" placeholder="Kelas" oninput="resetSiswaPageAndFilter()"></div>
+          <div class="col-6 col-md-2"><select class="form-select" id="fStatus" onchange="resetSiswaPageAndFilter()"><option value="">Semua Status</option><option value="Aktif">Aktif</option><option value="Tidak Aktif">Tidak Aktif</option><option value="Cuti">Cuti</option><option value="Lulus">Lulus</option></select></div>
+          <div class="col-12 col-md-3"><select class="form-select" id="fTipe" onchange="resetSiswaPageAndFilter()"><option value="">Semua Tipe</option><option value="Bulanan">Bulanan</option><option value="Semesteran">Semesteran</option></select></div>
+        </div>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+        <div class="d-flex align-items-center gap-2">
+          <span class="small text-muted fw-bold text-nowrap">Tampilkan:</span>
+          <select class="form-select form-select-sm" id="limitSiswa" onchange="resetSiswaPageAndFilter()" style="width: 90px; border-radius: 8px;">
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="all">Semua</option>
+          </select>
+        </div>
+        <div id="infoSiswaCount" class="small text-muted fw-bold"></div>
+      </div>
+      <div class="bento-card p-2 p-md-4" style="overflow-x: auto; margin-bottom: 10px;">
+        <table class="table table-sm table-striped align-middle small m-0" style="min-width: 650px;">
+          <thead class="table-dark">
+            <tr>
+              <th width="40" class="text-center"><input type="checkbox" id="chkAllSiswa" class="form-check-input form-check-input-bulk" onchange="toggleCheckAllSiswa(this)"></th>
+              <th>ID</th><th>Nama</th><th>Kelas</th><th>Status</th><th>Tipe</th><th>Biaya Perbulan</th>
+              <th class="text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tabelSiswaBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrapper mb-4">
+        <button class="btn btn-sm btn-outline-secondary px-3" id="btnPrevSiswa" onclick="pindahHalamanSiswa(-1)" style="border-radius: 8px;"><i class="fas fa-chevron-left me-1"></i> Prev</button>
+        <span class="small fw-bold text-dark" id="txtPageSiswa">Halaman 1</span>
+        <button class="btn btn-sm btn-outline-secondary px-3" id="btnNextSiswa" onclick="pindahHalamanSiswa(1)" style="border-radius: 8px;">Next <i class="fas fa-chevron-right ms-1"></i></button>
+      </div>
+    </div>
+
+    <!-- ===== SECTION: DATA PEMBAYARAN ===== -->
+    <div id="section-data-pembayaran" class="view-section">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold m-0" style="color: #0f172a; letter-spacing: -0.75px;">Data Pembayaran</h3>
+        <button class="btn btn-success fw-bold px-3 py-2" onclick="bukaModalInputBayar()" style="border-radius: 10px;"><i class="fas fa-file-invoice-dollar me-2"></i>Input Pembayaran Baru</button>
+      </div>
+      <div id="bulkActionBarPembayaran" class="bulk-action-bar mb-3">
+        <span class="fw-bold text-danger small"><i class="fas fa-check-square me-2"></i><span id="txtCountCheckedPembayaran">0</span> Transaksi terpilih</span>
+        <button class="btn btn-danger btn-sm fw-bold px-3" id="btnBulkHapusPembayaran" onclick="eksekusiBulkHapusPembayaran()"><i class="fas fa-trash-alt me-2"></i>Hapus Sekaligus</button>
+      </div>
+      <ul class="nav nav-tabs mb-4" id="paymentTabs" role="tablist" style="border-bottom: 2px solid #e2e8f0;">
+        <li class="nav-item"><button class="nav-link active fw-bold border-0" id="histori-tab" data-bs-toggle="tab" data-bs-target="#panel-histori" type="button" style="padding: 12px 15px; font-size:13px;">Histori Pembayaran</button></li>
+        <li class="nav-item"><button class="nav-link fw-bold text-danger border-0" id="tunggakan-tab" data-bs-toggle="tab" data-bs-target="#panel-tunggakan" type="button" onclick="renderTunggakan()" style="padding: 12px 15px; font-size:13px;">Tunggakan <span id="badgeTunggakan" class="badge bg-danger ms-1">0</span></button></li>
+      </ul>
+      <div class="tab-content">
+        <!-- Tab: Histori -->
+        <div class="tab-pane fade show active" id="panel-histori">
+          <div class="bento-card">
+            <div class="row g-2">
+              <div class="col-12 col-md-3">
+                <input list="siswaFilterOptions" class="form-control" id="fpNama" oninput="resetPembayaranPageAndFilter()" placeholder="Nama / ID Siswa...">
+                <datalist id="siswaFilterOptions"></datalist>
+              </div>
+              <div class="col-6 col-md-2"><input type="text" class="form-control" id="fpPeriode" oninput="resetPembayaranPageAndFilter()" placeholder="Periode (e.g. Mei 2026)"></div>
+              <div class="col-6 col-md-2">
+                <select class="form-select" id="fpTransfer" onchange="resetPembayaranPageAndFilter()">
+                  <option value="">Semua Rekening</option>
+                  <option value="BCA">BCA</option><option value="JAGO">JAGO</option>
+                  <option value="MANDIRI">MANDIRI</option><option value="BNI">BNI</option>
+                  <option value="Tunai">Tunai</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-2"><input type="date" class="form-control" id="fpTglStart" onchange="resetPembayaranPageAndFilter()" title="Mulai Tanggal Transaksi"></div>
+              <div class="col-6 col-md-2"><input type="date" class="form-control" id="fpTglEnd" onchange="resetPembayaranPageAndFilter()" title="Sampai Tanggal Transaksi"></div>
+              <div class="col-12 col-md-1"><button class="btn btn-secondary w-100 text-nowrap form-control" onclick="resetFiltersPembayaran()">Reset</button></div>
+            </div>
+          </div>
+          <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+            <div class="d-flex align-items-center gap-2">
+              <span class="small text-muted fw-bold text-nowrap">Tampilkan:</span>
+              <select class="form-select form-select-sm" id="limitPembayaran" onchange="resetPembayaranPageAndFilter()" style="width: 90px; border-radius: 8px;">
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="all">Semua</option>
+              </select>
+            </div>
+            <div id="infoPembayaranCount" class="small text-muted fw-bold"></div>
+          </div>
+          <div class="bento-card p-2 p-md-4" style="overflow-x: auto; margin-bottom: 10px;">
+            <table class="table table-sm table-striped align-middle small m-0" style="min-width: 900px;">
+              <thead class="table-dark">
+                <tr>
+                  <th width="40" class="text-center"><input type="checkbox" id="chkAllPembayaran" class="form-check-input form-check-input-bulk" onchange="toggleCheckAllPembayaran(this)"></th>
+                  <th>ID</th><th>Nama Siswa</th><th>Nominal</th><th>Periode</th>
+                  <th>Tanggal Transaksi</th><th>Transfer Ke</th><th>Pengirim</th>
+                  <th class="text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tabelHistoriBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-wrapper mb-4">
+            <button class="btn btn-sm btn-outline-secondary px-3" id="btnPrevPembayaran" onclick="pindahHalamanPembayaran(-1)" style="border-radius: 8px;"><i class="fas fa-chevron-left me-1"></i> Prev</button>
+            <span class="small fw-bold text-dark" id="txtPagePembayaran">Halaman 1</span>
+            <button class="btn btn-sm btn-outline-secondary px-3" id="btnNextPembayaran" onclick="pindahHalamanPembayaran(1)" style="border-radius: 8px;">Next <i class="fas fa-chevron-right ms-1"></i></button>
+          </div>
+        </div>
+        <!-- Tab: Tunggakan -->
+        <div class="tab-pane fade" id="panel-tunggakan">
+          <div class="alert alert-warning mb-4 rounded-3 border-0 shadow-sm small"><i class="fas fa-exclamation-triangle me-2"></i> List otomatis siswa aktif belum membayar bulan berjalan.</div>
+          <div class="bento-card p-2 p-md-4" style="overflow-x: auto;">
+            <table class="table table-sm table-striped small m-0" style="min-width: 550px;">
+              <thead class="table-danger"><tr><th>ID Siswa</th><th>Nama Siswa</th><th>Kelas</th><th>Tipe Pembayaran</th><th>Status</th></tr></thead>
+              <tbody id="tabelTunggakanBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ===== SECTION: DATA GURU ===== -->
+    <div id="section-data-guru" class="view-section">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold m-0" style="color:#0f172a;letter-spacing:-0.75px;">Master Data Guru</h3>
+        <button class="btn btn-primary fw-bold px-3 py-2" onclick="bukaModalTambahGuru()" style="border-radius:10px;"><i class="fas fa-user-plus me-2"></i>Tambah Data Guru</button>
+      </div>
+      <div class="bento-card">
+        <div class="row g-2">
+          <div class="col-12 col-md-4"><input type="text" class="form-control" id="fgId" placeholder="ID Guru" oninput="resetGuruPageAndFilter()"></div>
+          <div class="col-12 col-md-4"><input type="text" class="form-control" id="fgNama" placeholder="Nama Guru" oninput="resetGuruPageAndFilter()"></div>
+          <div class="col-12 col-md-4"><input type="text" class="form-control" id="fgMapel" placeholder="Mata Pelajaran" oninput="resetGuruPageAndFilter()"></div>
+        </div>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+        <div class="d-flex align-items-center gap-2">
+          <span class="small text-muted fw-bold text-nowrap">Tampilkan:</span>
+          <select class="form-select form-select-sm" id="limitGuru" onchange="resetGuruPageAndFilter()" style="width:90px;border-radius:8px;">
+            <option value="50" selected>50</option><option value="100">100</option><option value="all">Semua</option>
+          </select>
+        </div>
+        <div id="infoGuruCount" class="small text-muted fw-bold"></div>
+      </div>
+      <div class="bento-card p-2 p-md-4" style="overflow-x:auto;margin-bottom:10px;">
+        <table class="table table-sm table-striped align-middle small m-0" style="min-width:600px;">
+          <thead class="table-dark"><tr><th>ID Guru</th><th>Nama Guru</th><th>Mata Pelajaran</th><th>Kelas</th><th class="text-center">Aksi</th></tr></thead>
+          <tbody id="tabelGuruBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrapper mb-4">
+        <button class="btn btn-sm btn-outline-secondary px-3" id="btnPrevGuru" onclick="pindahHalamanGuru(-1)" style="border-radius:8px;"><i class="fas fa-chevron-left me-1"></i>Prev</button>
+        <span class="small fw-bold text-dark" id="txtPageGuru">Halaman 1</span>
+        <button class="btn btn-sm btn-outline-secondary px-3" id="btnNextGuru" onclick="pindahHalamanGuru(1)" style="border-radius:8px;">Next <i class="fas fa-chevron-right ms-1"></i></button>
+      </div>
+    </div>
+
+    <!-- ===== SECTION: HONOR GURU ===== -->
+    <div id="section-honor-guru" class="view-section">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold m-0" style="color:#0f172a;letter-spacing:-0.75px;">Data Honor Guru</h3>
+        <button class="btn btn-primary fw-bold px-3 py-2" onclick="bukaModalTambahHonor()" style="border-radius:10px;"><i class="fas fa-plus me-2"></i>Tambah Rate Honor</button>
+      </div>
+      <div class="bento-card p-2 p-md-4" style="overflow-x:auto;">
+        <table class="table table-sm table-striped align-middle small m-0" style="min-width:500px;">
+          <thead class="table-dark"><tr><th>Mata Pelajaran</th><th>Kelas</th><th>Honor per Pertemuan</th><th class="text-center">Aksi</th></tr></thead>
+          <tbody id="tabelHonorBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== SECTION: SCHEDULE ===== -->
+    <div id="section-schedule" class="view-section">
+      <ul class="nav nav-tabs mb-0" role="tablist" style="border-bottom:2px solid #e2e8f0;">
+        <li class="nav-item"><button class="nav-link active fw-bold border-0" data-bs-toggle="tab" data-bs-target="#panel-jadwal" type="button" style="padding:12px 15px;font-size:13px;"><i class="fas fa-calendar-alt me-1"></i>Kalender</button></li>
+        <li class="nav-item"><button class="nav-link fw-bold border-0" data-bs-toggle="tab" data-bs-target="#panel-rekap-honor" type="button" onclick="initRekapHonor()" style="padding:12px 15px;font-size:13px;"><i class="fas fa-calculator me-1"></i>Rekap Honor Bulanan</button></li>
+      </ul>
+      <div class="tab-content">
+
+        <!-- ── Tab: Kalender ── -->
+        <div class="tab-pane fade show active" id="panel-jadwal">
+          <!-- Toolbar -->
+          <div class="bento-card mb-0" style="border-radius:0;border-bottom:1px solid #e2e8f0;margin-bottom:0;">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button onclick="navigateCalendar(-7)" class="btn btn-outline-secondary btn-sm px-3" style="border-radius:8px;"><i class="fas fa-chevron-left"></i></button>
+                <button onclick="goToToday()" class="btn btn-outline-primary btn-sm fw-bold px-3" style="border-radius:8px;">Hari Ini</button>
+                <button onclick="navigateCalendar(7)" class="btn btn-outline-secondary btn-sm px-3" style="border-radius:8px;"><i class="fas fa-chevron-right"></i></button>
+                <span class="fw-bold" id="calWeekLabel" style="font-size:14px;color:#0f172a;letter-spacing:-0.3px;"></span>
+              </div>
+              <div class="d-flex gap-2">
+                <button onclick="bukaModalKelolaRuangan()" class="btn btn-outline-secondary btn-sm fw-bold px-3" style="border-radius:8px;"><i class="fas fa-door-open me-1"></i>Ruangan</button>
+                <button onclick="bukaModalTambahSchedule()" class="btn btn-success btn-sm fw-bold px-3" style="border-radius:8px;"><i class="fas fa-plus me-1"></i>Tambah Jadwal</button>
+              </div>
+            </div>
+          </div>
+          <!-- Calendar grid -->
+          <div class="bento-card mt-0 p-0" style="overflow:hidden;border-radius:0 0 16px 16px;">
+            <div id="calendarGrid" style="overflow-x:auto;overflow-y:auto;max-height:640px;">
+              <div class="text-center text-muted py-5 small fw-bold">Memuat kalender...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Tab: Rekap Honor ── -->
+        <div class="tab-pane fade" id="panel-rekap-honor">
+          <div class="bento-card">
+            <div class="d-flex flex-wrap gap-3 align-items-end">
+              <div>
+                <label class="small fw-bold text-muted mb-1 d-block">Bulan</label>
+                <select class="form-select" id="rekapBulan" style="width:140px;">
+                  <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
+                  <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+                  <option value="7">Juli</option><option value="8">Agustus</option><option value="9">September</option>
+                  <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+                </select>
+              </div>
+              <div>
+                <label class="small fw-bold text-muted mb-1 d-block">Tahun</label>
+                <input type="number" class="form-control" id="rekapTahun" style="width:100px;" value="2026" min="2020" max="2099">
+              </div>
+              <button class="btn btn-primary fw-bold px-4" onclick="loadRekapHonor()" style="border-radius:10px;">
+                <i class="fas fa-calculator me-2"></i>Hitung Rekap
+              </button>
+            </div>
+          </div>
+          <div class="bento-card p-2 p-md-4" style="overflow-x:auto;">
+            <table class="table table-sm align-middle small m-0" style="min-width:600px;">
+              <thead class="table-dark"><tr><th>ID Guru</th><th>Nama Guru</th><th class="text-center">Total Sesi</th><th>Total Honor</th></tr></thead>
+              <tbody id="tabelRekapHonorBody">
+                <tr><td colspan="4" class="text-center text-muted py-4">Pilih bulan &amp; tahun, lalu klik Hitung Rekap</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="bento-card d-flex justify-content-between align-items-center px-4 py-3" style="margin-top:-24px;border-radius:0 0 16px 16px;border-top:1px solid #e2e8f0;">
+            <span class="fw-bold text-muted text-uppercase small" style="letter-spacing:0.8px;">Total Honor Bulan Ini</span>
+            <span class="fw-bold text-success" style="font-size:20px;letter-spacing:-0.5px;" id="totalHonorBulanan">Rp 0</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- end main-content -->
+
+  <!-- ===== MODAL: INPUT PEMBAYARAN ===== -->
+  <div class="modal fade" id="modalBayar" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <h5 id="txtJudulFormBayar" class="fw-bold text-dark m-0">Input Pembayaran Baru</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="resetFormBayarKeDefault()"></button>
+        </div>
+        <div class="modal-body p-4">
+          <form id="formBayar" onsubmit="event.preventDefault();">
+            <input type="hidden" id="pRowIndexHidden">
+            <div class="mb-3" id="wrapperSearchSiswa">
+              <label class="small fw-bold text-muted mb-1">Cari Siswa (Ketik Nama/ID)</label>
+              <input list="siswaOptions" class="form-control" id="pSiswaSearch" oninput="autoFillNama()" placeholder="Ketik nama...">
+              <datalist id="siswaOptions"></datalist>
+            </div>
+            <div class="mb-3">
+              <label class="small fw-bold text-muted mb-1">Nama Terkonfirmasi</label>
+              <input type="text" class="form-control bg-light" id="pNama" readonly>
+            </div>
+            <div class="row">
+              <div class="col-6 mb-3"><label class="small fw-bold text-muted mb-1">Nominal (Rp)</label><input type="text" class="form-control" id="pNominal" placeholder="Contoh: 450.000" oninput="formatRibuan(this)" inputmode="numeric" required></div>
+              <div class="col-6 mb-3"><label class="small fw-bold text-muted mb-1">Tanggal Transaksi</label><input type="date" class="form-control" id="pTgl" required></div>
+            </div>
+            <div class="row">
+              <div class="col-6 mb-3">
+                <label class="small fw-bold text-muted mb-1">Transfer Ke</label>
+                <select class="form-select" id="pTransferKe" onchange="toggleLainLainInput()">
+                  <option value="BCA">BCA</option><option value="JAGO">JAGO</option>
+                  <option value="MANDIRI">MANDIRI</option><option value="BNI">BNI</option>
+                  <option value="Tunai">Tunai</option><option value="Lain-lain">Lain-lain</option>
+                </select>
+                <input type="text" class="form-control mt-2 d-none" id="pTransferLainnya" placeholder="Nama bank...">
+              </div>
+              <div class="col-6 mb-3"><label class="small fw-bold text-muted mb-1">Nama Pengirim</label><input type="text" class="form-control" id="pPengirim" placeholder="Ayah / Ibu / dll"></div>
+            </div>
+            <div class="mb-3" id="wrapperMultiPeriode">
+              <label class="small fw-bold text-muted d-block mb-2">Pilih Periode Bulan:</label>
+              <div id="periodeCheckboxContainer" class="p-3 border rounded bg-light style-custom" style="max-height: 140px; overflow-y: auto;"></div>
+            </div>
+            <div class="mb-3 d-none" id="wrapperSinglePeriode">
+              <label class="small fw-bold text-muted mb-1">Periode Bulan (Edit Mode)</label>
+              <input type="text" class="form-control" id="pSinglePeriode">
+            </div>
+            <div class="d-flex gap-2 mt-4">
+              <button type="button" class="btn btn-light w-50 fw-bold py-2" data-bs-dismiss="modal" onclick="resetFormBayarKeDefault()" style="border-radius: 10px;">Batal</button>
+              <button type="button" onclick="submitPembayaran()" id="btnSimpanBayar" class="btn btn-success w-100 fw-bold py-2" style="border-radius: 10px;">Simpan Transaksi</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: FORM SISWA ===== -->
+  <div class="modal fade" id="modalSiswa" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <h5 id="txtJudulFormSiswa" class="fw-bold text-dark m-0">Pendaftaran Siswa Baru</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="resetFormSiswaKeDefault()"></button>
+        </div>
+        <div class="modal-body p-4">
+          <form id="formSiswa" onsubmit="event.preventDefault();">
+            <input type="hidden" id="mIdHidden">
+            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Nama Lengkap</label><input type="text" class="form-control" id="mNama" required></div>
+            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Kelas</label><select class="form-select" id="mKelas" required><option value="">-- Pilih Kelas --</option></select></div>
+            <div class="row mb-3">
+              <div class="col-6"><label class="small fw-bold text-muted mb-1">Status</label><select class="form-select" id="mStatus"><option value="Aktif">Aktif</option><option value="Tidak Aktif">Tidak Aktif</option><option value="Cuti">Cuti</option><option value="Lulus">Lulus</option></select></div>
+              <div class="col-6"><label class="small fw-bold text-muted mb-1">Tipe Bayar</label><select class="form-select" id="mTipe"><option value="Bulanan">Bulanan</option><option value="Semesteran">Semesteran</option></select></div>
+            </div>
+            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Biaya Perbulan (Rp)</label><input type="text" class="form-control" id="mBiaya" placeholder="Contoh: 450.000" oninput="formatRibuan(this)" inputmode="numeric" required></div>
+            <div class="d-flex gap-2 mt-4">
+              <button type="button" class="btn btn-light w-50 fw-bold py-2" data-bs-dismiss="modal" onclick="resetFormSiswaKeDefault()" style="border-radius: 10px;">Batal</button>
+              <button type="button" onclick="submitSiswa()" id="btnSimpanSiswa" class="btn btn-primary w-100 fw-bold py-2" style="border-radius: 10px;">Simpan Data</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: FORM GURU ===== -->
+  <div class="modal fade" id="modalGuru" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content" style="border-radius:16px;border:none;box-shadow:0 20px 25px -5px rgb(0 0 0/0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <h5 id="txtJudulFormGuru" class="fw-bold text-dark m-0">Tambah Data Guru</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="resetFormGuruKeDefault()"></button>
+        </div>
+        <div class="modal-body p-4">
+          <form id="formGuru" onsubmit="event.preventDefault();">
+            <input type="hidden" id="gRowIndexHidden">
+
+            <!-- Mode selector (disembunyikan saat mode edit) -->
+            <div id="gModeSelector" class="mb-3 p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0;">
+              <div class="d-flex gap-4">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="gMode" id="gModeNew" value="new" checked onchange="toggleGuruMode()">
+                  <label class="form-check-label fw-bold small" for="gModeNew">Guru Baru</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="gMode" id="gModeExisting" value="existing" onchange="toggleGuruMode()">
+                  <label class="form-check-label fw-bold small" for="gModeExisting">Tambah Mapel/Kelas ke Guru yang Ada</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Input nama untuk guru baru -->
+            <div class="mb-3" id="gNamaBaruWrapper">
+              <label class="small fw-bold text-muted mb-1">Nama Guru</label>
+              <input type="text" class="form-control" id="gNamaBaru" placeholder="Nama lengkap guru baru">
+            </div>
+
+            <!-- Search guru yang sudah ada -->
+            <div class="mb-3 d-none" id="gSearchWrapper">
+              <label class="small fw-bold text-muted mb-1">Cari Guru yang Ada (Ketik Nama / ID)</label>
+              <input list="gGuruOptions" class="form-control" id="gGuruSearch" oninput="onGuruModalSearchChange()" placeholder="Ketik ID atau nama guru...">
+              <datalist id="gGuruOptions"></datalist>
+            </div>
+
+            <!-- Nama terkonfirmasi untuk guru yang ada -->
+            <div class="mb-3 d-none" id="gNamaKonfirmasiWrapper">
+              <label class="small fw-bold text-muted mb-1">Nama Guru (Terkonfirmasi)</label>
+              <input type="text" class="form-control bg-light" id="gNamaKonfirmasi" readonly>
+            </div>
+
+            <!-- Mata Pelajaran -->
+            <div class="mb-3">
+              <label class="small fw-bold text-muted mb-1">Mata Pelajaran</label>
+              <input type="text" class="form-control" id="gMapel" placeholder="Contoh: Matematika" required>
+            </div>
+
+            <!-- Kelas: checkboxes grouped by jenjang -->
+            <div class="mb-3">
+              <label class="small fw-bold text-muted mb-2 d-block">Pilih Kelas <span class="text-danger">*</span></label>
+              <div id="gKelasCheckboxContainer" class="p-3 border rounded-3 bg-light" style="max-height:220px;overflow-y:auto;"></div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+              <button type="button" class="btn btn-light w-50 fw-bold py-2" data-bs-dismiss="modal" onclick="resetFormGuruKeDefault()" style="border-radius:10px;">Batal</button>
+              <button type="button" onclick="submitGuru()" id="btnSimpanGuru" class="btn btn-primary w-100 fw-bold py-2" style="border-radius:10px;">Simpan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: FORM HONOR ===== -->
+  <div class="modal fade" id="modalHonor" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius:16px;border:none;box-shadow:0 20px 25px -5px rgb(0 0 0/0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <h5 id="txtJudulFormHonor" class="fw-bold text-dark m-0">Tambah Rate Honor</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="resetFormHonorKeDefault()"></button>
+        </div>
+        <div class="modal-body p-4">
+          <form id="formHonor" onsubmit="event.preventDefault();">
+            <input type="hidden" id="hRowIndexHidden">
+            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Mata Pelajaran</label><input type="text" class="form-control" id="hMapel" placeholder="Contoh: Matematika" required></div>
+            <div class="mb-3">
+              <label class="small fw-bold text-muted mb-1">Kelas</label>
+              <select class="form-select" id="hKelas" required><option value="">-- Pilih Kelas --</option></select>
+            </div>
+            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Honor per Pertemuan (Rp)</label><input type="text" class="form-control" id="hHonor" placeholder="Contoh: 100.000" oninput="formatRibuan(this)" inputmode="numeric" required></div>
+            <div class="d-flex gap-2 mt-4">
+              <button type="button" class="btn btn-light w-50 fw-bold py-2" data-bs-dismiss="modal" onclick="resetFormHonorKeDefault()" style="border-radius:10px;">Batal</button>
+              <button type="button" onclick="submitHonor()" id="btnSimpanHonor" class="btn btn-primary w-100 fw-bold py-2" style="border-radius:10px;">Simpan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: FORM SCHEDULE ===== -->
+  <div class="modal fade" id="modalSchedule" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content" style="border-radius:16px;border:none;box-shadow:0 20px 25px -5px rgb(0 0 0/0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <h5 id="txtJudulFormSchedule" class="fw-bold text-dark m-0">Tambah Jadwal</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="resetFormScheduleKeDefault()"></button>
+        </div>
+        <div class="modal-body p-4">
+          <form id="formSchedule" onsubmit="event.preventDefault();">
+            <input type="hidden" id="sRowIndexHidden">
+            <div class="row">
+              <div class="col-12 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Tanggal</label><input type="date" class="form-control" id="sTanggal" required></div>
+              <div class="col-6 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Jam Mulai</label><input type="time" class="form-control" id="sJamMulai" oninput="hitungDurasi()"></div>
+              <div class="col-6 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Jam Berakhir</label><input type="time" class="form-control" id="sJamBerakhir" oninput="hitungDurasi()"></div>
+            </div>
+            <div class="row">
+              <div class="col-6 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Durasi</label><input type="text" class="form-control bg-light" id="sDurasi" readonly placeholder="Otomatis"></div>
+              <div class="col-6 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Ruangan</label><input type="text" class="form-control" id="sRuangan" placeholder="Contoh: R-01"></div>
+              <div class="col-12 col-md-4 mb-3">
+                <label class="small fw-bold text-muted mb-1">Kelas</label>
+                <select class="form-select" id="sKelas" required onchange="autoFillHonorSesi()"><option value="">-- Pilih Kelas --</option></select>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-12 col-md-6 mb-3">
+                <label class="small fw-bold text-muted mb-1">Mata Pelajaran</label>
+                <input list="sMapelOptions" type="text" class="form-control" id="sMapel" placeholder="Ketik mata pelajaran..." oninput="autoFillHonorSesi()" required>
+                <datalist id="sMapelOptions"></datalist>
+              </div>
+              <div class="col-12 col-md-6 mb-3">
+                <label class="small fw-bold text-muted mb-1">Cari Guru (Nama / ID)</label>
+                <input list="sGuruOptions" type="text" class="form-control" id="sGuruSearch" oninput="onGuruSearchChange()" placeholder="Ketik nama atau ID guru...">
+                <datalist id="sGuruOptions"></datalist>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-12 col-md-6 mb-3"><label class="small fw-bold text-muted mb-1">Nama Guru (Terkonfirmasi)</label><input type="text" class="form-control bg-light" id="sNamaGuru" readonly></div>
+              <div class="col-12 col-md-6 mb-3">
+                <label class="small fw-bold text-muted mb-1">Info Honor</label>
+                <div class="form-control bg-light d-flex align-items-center" id="sHonorInfo" style="min-height:38px;font-size:13px;color:#64748b;">-</div>
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-2">
+              <button type="button" class="btn btn-light w-50 fw-bold py-2" data-bs-dismiss="modal" onclick="resetFormScheduleKeDefault()" style="border-radius:10px;">Batal</button>
+              <button type="button" onclick="submitSchedule()" id="btnSimpanSchedule" class="btn btn-success w-100 fw-bold py-2" style="border-radius:10px;">Simpan Jadwal</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== QUICK ADD POPUP (calendar click) ===== -->
+  <div id="calQuickPopup" style="display:none;position:fixed;z-index:10000;background:#fff;
+       border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.22);width:326px;overflow:hidden;font-family:inherit;">
+    <!-- Header -->
+    <div style="background:#1a73e8;padding:10px 16px;display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div id="qpDayLabel" style="color:#fff;font-weight:700;font-size:13px;"></div>
+        <div id="qpDateSub"  style="color:rgba(255,255,255,0.8);font-size:11px;margin-top:1px;"></div>
+      </div>
+      <button onclick="tutupQuickPopup()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:22px;line-height:1;padding:0 2px;margin-top:-2px;">&times;</button>
+    </div>
+    <!-- Body -->
+    <div style="padding:12px 14px 4px;">
+      <!-- Jam Mulai + Jam Berakhir + Durasi (editable) -->
+      <div class="d-flex gap-2 mb-2 align-items-end">
+        <div style="flex:1;">
+          <label style="font-size:10px;font-weight:700;color:#70757a;display:block;margin-bottom:2px;">MULAI</label>
+          <input type="time" class="form-control form-control-sm" id="qpJamMulai" onchange="onQpTimeChange()" style="border-radius:8px;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:10px;font-weight:700;color:#70757a;display:block;margin-bottom:2px;">BERAKHIR</label>
+          <input type="time" class="form-control form-control-sm" id="qpJamBerakhir" onchange="onQpTimeChange()" style="border-radius:8px;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:10px;font-weight:700;color:#70757a;display:block;margin-bottom:2px;">DURASI</label>
+          <div id="qpDurasi" style="font-size:12px;font-weight:700;color:#1a73e8;padding:5px 2px 4px;border-bottom:1px solid #e2e8f0;min-height:30px;">-</div>
+        </div>
+      </div>
+      <!-- Ruangan (input+datalist = bisa ketik baru) -->
+      <div class="mb-2">
+        <label style="font-size:10px;font-weight:700;color:#70757a;display:block;margin-bottom:2px;">RUANGAN <span style="color:#94a3b8;font-weight:400;font-size:9px;">— ketik baru atau pilih</span></label>
+        <input list="qpRuanganOptions" class="form-control form-control-sm" id="qpRuangan"
+               placeholder="Contoh: R-01" oninput="cekKonflikQuickPopup()" style="border-radius:8px;">
+        <datalist id="qpRuanganOptions"></datalist>
+      </div>
+      <!-- Kelas -->
+      <div class="mb-2">
+        <select class="form-select form-select-sm" id="qpKelas" style="border-radius:8px;">
+          <option value="">-- Pilih Kelas --</option>
+        </select>
+      </div>
+      <!-- Mata Pelajaran -->
+      <div class="mb-2">
+        <input list="qpMapelOptions" class="form-control form-control-sm" id="qpMapel"
+               placeholder="Mata Pelajaran..." style="border-radius:8px;">
+        <datalist id="qpMapelOptions"></datalist>
+      </div>
+      <!-- Guru -->
+      <div class="mb-2">
+        <input list="qpGuruOptions" class="form-control form-control-sm" id="qpGuru"
+               oninput="onQpGuruChange()" placeholder="Ketik Nama / ID Guru..." style="border-radius:8px;">
+        <datalist id="qpGuruOptions"></datalist>
+        <input type="hidden" id="qpNamaGuru">
+      </div>
+      <!-- Toggle: Ulangi setiap minggu -->
+      <div class="d-flex align-items-center gap-2 mb-1" style="padding:3px 0;">
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" id="qpRecurring" role="switch" onchange="toggleQpRecurring()">
+          <label class="form-check-label small fw-bold" for="qpRecurring" style="color:#334155;font-size:12px;">
+            <i class="fas fa-redo me-1" style="color:#1a73e8;"></i>Ulangi setiap minggu
+          </label>
+        </div>
+      </div>
+      <!-- Recurring: sampai tanggal -->
+      <div id="qpRecurringWrapper" style="display:none;background:#eff6ff;border-radius:8px;padding:8px 10px;margin-bottom:6px;border:1px solid #bfdbfe;">
+        <label style="font-size:10px;font-weight:700;color:#1a73e8;display:block;margin-bottom:4px;">ULANGI SAMPAI TANGGAL</label>
+        <input type="date" class="form-control form-control-sm" id="qpUntilDate" onchange="updateQpRecurringInfo()" style="border-radius:8px;">
+        <div id="qpRecurringInfo" style="font-size:11px;color:#1558b0;font-weight:600;margin-top:5px;"></div>
+      </div>
+      <!-- Konflik warning -->
+      <div id="qpKonflikWarning" style="display:none;background:#fff3cd;border:1px solid #ffc107;
+           border-radius:8px;padding:7px 10px;font-size:11px;font-weight:600;color:#856404;margin-bottom:6px;">
+        <i class="fas fa-exclamation-triangle me-1"></i><span id="qpKonflikText"></span>
+      </div>
+    </div>
+    <!-- Footer -->
+    <div style="padding:6px 14px 12px;display:flex;gap:8px;">
+      <button onclick="moreOptionsQuickPopup()" class="btn btn-light btn-sm fw-bold"
+              style="border-radius:8px;flex:1;font-size:12px;">Lebih Lengkap</button>
+      <button onclick="simpanQuickPopup()" class="btn btn-primary btn-sm fw-bold"
+              style="border-radius:8px;flex:1;font-size:12px;" id="qpSaveBtn">
+        <i class="fas fa-check me-1"></i>Simpan
+      </button>
+    </div>
+  </div>
+  <!-- Overlay untuk tutup popup -->
+  <div id="calPopupOverlay" onclick="tutupQuickPopup()"
+       style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;"></div>
+
+  <!-- ===== MODAL: KELOLA RUANGAN ===== -->
+  <div class="modal fade" id="modalRuangan" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius:16px;border:none;box-shadow:0 20px 25px -5px rgb(0 0 0/0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <h5 class="fw-bold text-dark m-0"><i class="fas fa-door-open me-2 text-primary"></i>Kelola Ruangan</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+          <p class="small text-muted mb-3">Ruangan yang tampil sebagai kolom di kalender. Urutan bisa disesuaikan.</p>
+          <div id="ruanganList" class="mb-3" style="max-height:280px;overflow-y:auto;"></div>
+          <div class="d-flex gap-2">
+            <input type="text" class="form-control" id="newRuanganInput" placeholder="Nama ruangan baru, contoh: R-01"
+                   onkeydown="if(event.key==='Enter') tambahRuanganBaru()">
+            <button onclick="tambahRuanganBaru()" class="btn btn-primary fw-bold px-3" style="border-radius:8px;white-space:nowrap;">
+              <i class="fas fa-plus me-1"></i>Tambah
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer border-0 px-4 pb-4 pt-0">
+          <button type="button" class="btn btn-light fw-bold px-4" data-bs-dismiss="modal" style="border-radius:10px;">Batal</button>
+          <button type="button" class="btn btn-primary fw-bold px-4" data-bs-dismiss="modal" onclick="renderCalendar()" style="border-radius:10px;">
+            <i class="fas fa-check me-1"></i>Simpan & Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: NAIK KELAS ===== -->
+  <div class="modal fade" id="modalNaikKelas" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <h5 class="fw-bold text-dark m-0"><i class="fas fa-graduation-cap me-2 text-primary"></i>Proses Naik Kelas</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body p-4">
+
+          <!-- State: Loading -->
+          <div id="naikKelasLoading" class="text-center py-4">
+            <div class="spinner-border text-primary mb-3" role="status"></div>
+            <div class="text-muted fw-bold small">Menganalisis data siswa...</div>
+          </div>
+
+          <!-- State: Preview -->
+          <div id="naikKelasContent" class="d-none">
+            <div class="alert border-0 rounded-3 mb-4 small fw-bold" style="background:#fefce8; color:#92400e; border-left: 4px solid #f59e0b !important;">
+              <i class="fas fa-exclamation-triangle me-2"></i>
+              Semua siswa (Aktif, Tidak Aktif, dan Cuti) akan diproses. Siswa kelas <strong>SMA 12</strong> akan berubah statusnya menjadi <strong>Lulus</strong>. Tindakan ini <strong>tidak bisa dibatalkan</strong>.
+            </div>
+            <div class="row g-3 mb-4">
+              <div class="col-6">
+                <div class="p-3 rounded-3 text-center" style="background:#eff6ff; border: 1px solid #bfdbfe;">
+                  <div class="fw-bold text-primary" style="font-size:32px; letter-spacing:-1px;" id="countNaikPreview">0</div>
+                  <div class="small text-muted fw-bold mt-1">Siswa Naik Kelas</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="p-3 rounded-3 text-center" style="background:#f0fdf4; border: 1px solid #bbf7d0;">
+                  <div class="fw-bold text-success" style="font-size:32px; letter-spacing:-1px;" id="countLulusPreview">0</div>
+                  <div class="small text-muted fw-bold mt-1">Siswa Lulus (SMA 12)</div>
+                </div>
+              </div>
+            </div>
+            <div style="max-height:300px; overflow-y:auto; border-radius:10px; border:1px solid #e2e8f0;">
+              <table class="table table-sm table-striped align-middle small m-0">
+                <thead class="table-dark" style="position:sticky; top:0; z-index:1;">
+                  <tr><th>ID</th><th>Nama</th><th>Kelas Sekarang</th><th>Perubahan</th></tr>
+                </thead>
+                <tbody id="tabelPreviewNaikKelas"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- State: Kosong -->
+          <div id="naikKelasEmpty" class="d-none text-center py-5">
+            <i class="fas fa-check-circle text-success" style="font-size:48px;"></i>
+            <div class="mt-3 fw-bold text-muted">Tidak ada siswa aktif yang perlu diproses.</div>
+          </div>
+
+        </div>
+        <div class="modal-footer border-0 px-4 pb-4 pt-0" id="naikKelasFooter" style="display:none;">
+          <button type="button" class="btn btn-light fw-bold px-4" data-bs-dismiss="modal" style="border-radius:10px;">Batal</button>
+          <button type="button" class="btn btn-primary fw-bold px-4" id="btnEksekusiNaikKelas" onclick="eksekusiNaikKelas()" style="border-radius:10px;">
+            <i class="fas fa-graduation-cap me-2"></i>Eksekusi Naik Kelas
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <?!= include('JavaScript'); ?>
+</body>
+</html>

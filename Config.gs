@@ -1,0 +1,10 @@
+// ==========================================
+// CONFIG.GS - Pengaturan Global Azara Course
+// ==========================================
+const CONFIG = {
+  SHEET_SISWA   : "Master Data Siswa",
+  SHEET_PAYMENT : "Historical Payment",
+  SHEET_GURU    : "Master Data Guru",
+  SHEET_HONOR   : "Data Honor Guru",
+  SHEET_SCHEDULE: "Data Schedule"
+};
