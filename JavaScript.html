@@ -1106,6 +1106,7 @@ function onCalSlotClick(event, dateStr, hour, minute) {
 function showPreviewBlock(slotEl, h1, m1, h2, m2) {
   document.querySelectorAll('.cal-preview-block').forEach(el => el.remove());
   let dayEl = slotEl.parentElement;  // day content area
+  if (!dayEl) return;
 
   let startMin = (h1 - CAL_START_HOUR) * 60 + m1;
   let endMin   = (h2 - CAL_START_HOUR) * 60 + m2;
@@ -1114,11 +1115,13 @@ function showPreviewBlock(slotEl, h1, m1, h2, m2) {
 
   let block = document.createElement('div');
   block.className = 'cal-preview-block';
+  // Style mirip Google Calendar: solid purple/blue block (looks like a saved event)
   block.style.cssText = `position:absolute;left:${left+2}px;width:${width-4}px;top:4px;height:${CAL_BLOCK_H}px;
-    background:#c2d7f7;border-left:3px solid #1a73e8;border-radius:4px;padding:3px 8px;
-    z-index:8;pointer-events:none;border:1px solid #1a73e8;display:flex;flex-direction:column;justify-content:center;`;
-  block.innerHTML = `<div style="font-size:11px;font-weight:700;color:#1558b0;line-height:1.3;">(Jadwal Baru)</div>
-    <div style="font-size:10px;color:#1558b0;font-weight:500;">${String(h1).padStart(2,'0')}:${String(m1).padStart(2,'0')} \u2013 ${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}</div>`;
+    background:#7986cb;border-radius:4px;padding:4px 8px;
+    z-index:12;pointer-events:none;display:flex;flex-direction:column;justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,0.15);`;
+  block.innerHTML = `<div style="font-size:11px;font-weight:600;color:#fff;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">(Jadwal Baru)</div>
+    <div style="font-size:10px;color:#fff;opacity:.95;line-height:1.2;">${String(h1).padStart(2,'0')}:${String(m1).padStart(2,'0')} \u2013 ${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}</div>`;
   dayEl.appendChild(block);
 }
 
@@ -1188,7 +1191,7 @@ function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
   until.setMonth(until.getMonth() + 1);
   document.getElementById('qpUntilDate').value = toLocalDateStr(until);
 
-  // ── Posisi popup yang anti-terpotong meski content grow (saat toggle recurring) ──
+  // ── Posisi popup: BELOW day row supaya tidak menutupi preview block (yang extend horizontal ke kanan) ──
   // Reset dulu style
   popup.style.maxHeight  = '';
   popup.style.overflowY  = 'visible';
@@ -1197,20 +1200,28 @@ function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
   popup.style.left = '0px';
   popup.style.top  = '0px';
 
-  // Estimasi tinggi MAX popup (saat recurring aktif) sekitar 680px supaya posisi bisa antisipasi grow
   const ESTIMATED_MAX_H = 680;
   let popupW = popup.offsetWidth || 330;
 
   let rect = event.target.getBoundingClientRect();
-  // Posisi X: prefer kanan klik, fallback ke kiri
-  let x = rect.right + 10;
-  if (x + popupW > window.innerWidth - 10) x = rect.left - popupW - 10;
+  // Position popup di BAWAH klik (rect.bottom = bottom of day row content area)
+  // supaya preview block yang extend horizontal di samping/dalam row tetap terlihat
+  let x = rect.left;
+  let y = rect.bottom + 8;
+
+  // Adjust X kalau popup overflow kanan layar
+  if (x + popupW > window.innerWidth - 10) x = window.innerWidth - popupW - 10;
   if (x < 10) x = 10;
 
-  // Posisi Y: anchor TOP supaya ada ruang ke bawah untuk growth
-  let y = rect.top;
+  // Kalau popup tidak muat ke bawah → coba ke atas day row
   if (y + ESTIMATED_MAX_H > window.innerHeight - 10) {
-    y = Math.max(10, window.innerHeight - ESTIMATED_MAX_H - 10);
+    let above = rect.top - ESTIMATED_MAX_H - 8;
+    if (above >= 10) {
+      y = above;
+    } else {
+      // Tidak muat atas/bawah → anchor ke top viewport, popup akan scroll internal
+      y = 10;
+    }
   }
   if (y < 10) y = 10;
 
@@ -1218,7 +1229,6 @@ function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
   popup.style.top  = y + 'px';
 
   // Set max-height sesuai sisa ruang dari top popup ke bawah viewport
-  // → kalau popup grow lebih dari ini, akan auto scroll internal
   let availH = window.innerHeight - y - 10;
   popup.style.maxHeight = availH + 'px';
   popup.style.overflowY = 'auto';
