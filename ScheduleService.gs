@@ -9,6 +9,79 @@ function invalidateScheduleCache() {
   CacheService.getScriptCache().remove(CACHE_KEY_SCHEDULE);
 }
 
+// ── Helper: normalize jam (string "HH:MM" atau Date object) ──
+function formatJamString(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "HH:mm");
+  }
+  var s = val.toString().trim();
+  // Sudah HH:MM? langsung
+  if (/^\d{1,2}:\d{2}$/.test(s)) {
+    var p = s.split(':');
+    return p[0].padStart(2, '0') + ':' + p[1];
+  }
+  // Coba parse sebagai date string
+  var d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return Utilities.formatDate(d, Session.getScriptTimeZone(), "HH:mm");
+  }
+  return s;
+}
+
+// ── Helper: jam string "HH:MM" → menit total (untuk komparasi) ──
+function jamToMinutes(jamStr) {
+  if (!jamStr) return null;
+  var s = formatJamString(jamStr);
+  var m = s.match(/(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  return parseInt(m[1])*60 + parseInt(m[2]);
+}
+
+// ── Helper: konflik di sheet (untuk dipakai sebelum simpan) ──
+function findKonflikInSheet(sheetSchedule, ruangan, tglObj, jamMulai, jamBerakhir, excludeRow) {
+  if (!ruangan || !tglObj) return [];
+  var data = sheetSchedule.getDataRange().getValues();
+  var targetDateStr = Utilities.formatDate(tglObj, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  var newS = jamToMinutes(jamMulai);
+  var newE = jamToMinutes(jamBerakhir);
+  if (newS == null || newE == null) return [];
+
+  var konflik = [];
+  for (var i = 1; i < data.length; i++) {
+    var rowNum = i + 1;
+    if (excludeRow && rowNum === excludeRow) continue;
+    var row = data[i];
+    if (!row[0]) continue;
+
+    // Date check (col A)
+    var rowDate = row[0] instanceof Date ? row[0] : new Date(row[0]);
+    if (isNaN(rowDate.getTime())) continue;
+    var rowDateStr = Utilities.formatDate(rowDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
+    if (rowDateStr !== targetDateStr) continue;
+
+    // Ruangan check (col E)
+    var rowRuangan = row[4] ? row[4].toString().trim().toLowerCase() : "";
+    if (rowRuangan !== ruangan.toString().trim().toLowerCase()) continue;
+
+    // Time overlap check
+    var rowMulai = jamToMinutes(row[1]);
+    var rowAkhir = jamToMinutes(row[2]);
+    if (rowMulai == null || rowAkhir == null) continue;
+    if (rowMulai < newE && newS < rowAkhir) {
+      konflik.push({
+        rowIndex   : rowNum,
+        mapel      : row[6] ? row[6].toString().trim() : "",
+        kelas      : row[5] ? row[5].toString().trim() : "",
+        namaGuru   : row[8] ? row[8].toString().trim() : "",
+        jamMulai   : formatJamString(row[1]),
+        jamBerakhir: formatJamString(row[2])
+      });
+    }
+  }
+  return konflik;
+}
+
 // ==========================================
 // 1. GET SCHEDULE DATA (with cache)
 // ==========================================
@@ -29,7 +102,6 @@ function getScheduleData() {
         var rawTgl = data[i][0];
         var tglString = "";
         if (rawTgl instanceof Date) {
-          // Simpan dalam format lokal YYYY-MM-DD untuk hindari timezone offset
           var y = rawTgl.getFullYear();
           var m = String(rawTgl.getMonth() + 1).padStart(2,"0");
           var d = String(rawTgl.getDate()).padStart(2,"0");
@@ -40,8 +112,8 @@ function getScheduleData() {
         scheduleList.push({
           rowIndex   : i + 1,
           tgl        : tglString,
-          jamMulai   : data[i][1] ? data[i][1].toString().trim() : "",
-          jamBerakhir: data[i][2] ? data[i][2].toString().trim() : "",
+          jamMulai   : formatJamString(data[i][1]),   // NORMALIZE ke HH:MM
+          jamBerakhir: formatJamString(data[i][2]),   // NORMALIZE ke HH:MM
           durasi     : data[i][3] ? data[i][3].toString().trim() : "",
           ruangan    : data[i][4] ? data[i][4].toString().trim() : "",
           kelas      : data[i][5] ? data[i][5].toString().trim() : "",
@@ -59,7 +131,7 @@ function getScheduleData() {
 }
 
 // ==========================================
-// 2. SIMPAN / EDIT JADWAL
+// 2. SIMPAN / EDIT JADWAL (dengan KONFLIK CHECK di backend)
 // ==========================================
 function simpanSchedule(payload) {
   if (!payload.tgl)   return "❌ Gagal: Tanggal tidak boleh kosong!";
@@ -74,19 +146,43 @@ function simpanSchedule(payload) {
     sheetSchedule.appendRow(["Tanggal","Jam Mulai","Jam Berakhir","Durasi","Ruangan","Kelas","Mata Pelajaran","ID Guru","Nama Guru","Tipe Sesi"]);
   }
 
-  // Parse tanggal dengan aman (tgl format YYYY-MM-DD)
+  // Parse tanggal dengan aman
   var tglObj;
   if (payload.tgl.indexOf("T") < 0) {
-    // YYYY-MM-DD murni -> tambahkan jam 12 supaya tidak shift timezone
     tglObj = new Date(payload.tgl + "T12:00:00");
   } else {
     tglObj = new Date(payload.tgl);
   }
 
+  var excludeRow = payload.rowIndex ? parseInt(payload.rowIndex) : null;
+
+  // ── CEK KONFLIK SEBELUM SIMPAN (kecuali user sudah explicit confirm via forceOverwrite) ──
+  if (payload.ruangan && payload.jamMulai && payload.jamBerakhir && !payload.forceOverwrite) {
+    var konflik = findKonflikInSheet(sheetSchedule, payload.ruangan, tglObj, payload.jamMulai, payload.jamBerakhir, excludeRow);
+    if (konflik.length > 0) {
+      // Format pesan khusus yang akan di-detect oleh frontend
+      var info = konflik.map(function(k){
+        return k.mapel + " " + k.kelas + " (" + k.jamMulai + "-" + k.jamBerakhir + ") oleh " + k.namaGuru;
+      }).join("; ");
+      // Return string khusus dengan kode KONFLIK
+      return "⚠️KONFLIK⚠️ Ruangan " + payload.ruangan + " sudah dipakai: " + info;
+    }
+  }
+
+  // ── Kalau forceOverwrite, hapus konflik dulu lalu lanjut simpan ──
+  if (payload.forceOverwrite && payload.ruangan && payload.jamMulai && payload.jamBerakhir) {
+    var konflikForce = findKonflikInSheet(sheetSchedule, payload.ruangan, tglObj, payload.jamMulai, payload.jamBerakhir, excludeRow);
+    // Hapus dari row tertinggi ke terendah (supaya rowIndex tidak shift)
+    konflikForce.sort(function(a,b){ return b.rowIndex - a.rowIndex; });
+    konflikForce.forEach(function(k) {
+      try { sheetSchedule.deleteRow(k.rowIndex); } catch(e) {}
+    });
+  }
+
   var tipeSesi = payload.tipeSesi || "Offline";
 
-  if (payload.rowIndex && parseInt(payload.rowIndex) > 1) {
-    var row = parseInt(payload.rowIndex);
+  if (excludeRow && excludeRow > 1) {
+    var row = excludeRow;
     sheetSchedule.getRange(row, 1).setValue(tglObj);
     sheetSchedule.getRange(row, 2).setValue(payload.jamMulai    || "");
     sheetSchedule.getRange(row, 3).setValue(payload.jamBerakhir || "");
@@ -141,7 +237,6 @@ function hapusSchedule(rowIndex) {
 function getRekapHonorBulanan(bulan, tahun) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Build honor map: key = "mapel||kelas" → {offline, online}
   var honorMap = {};
   var sheetMapel = ss.getSheetByName(CONFIG.SHEET_MAPEL);
   if (sheetMapel) {
