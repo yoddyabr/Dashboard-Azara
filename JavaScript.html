@@ -393,6 +393,7 @@ function submitSiswa() {
   if (!payload.nama || !payload.kelas) { tampilkanToast("Mohon lengkapi data!", 'warning'); return; }
   setTombolLoading('btnSimpanSiswa', true, "Menyimpan...");
   tampilkanLoading("Menyimpan data siswa...");
+  if (!isValidComboValue('mKelas')) { tampilkanToast('\u26a0\ufe0f Kelas tidak valid! Pilih dari daftar suggestion.','warning'); return; }
   google.script.run
     .withSuccessHandler(res => {
       sembunyikanLoading();
@@ -925,8 +926,15 @@ function layoutDaySchedules(daySched) {
   return items;
 }
 
+// ── Konstanta layout TRANSPOSED ──
+const CAL_HOUR_W    = 100;   // px per jam (lebar kolom waktu)
+const CAL_BLOCK_H   = 38;    // tinggi blok jadwal
+const CAL_BLOCK_GAP = 3;     // gap antar block stacked
+const CAL_GUTTER_W  = 110;   // lebar gutter kiri (label hari)
+const CAL_MIN_ROW_H = 60;    // tinggi minimum row hari
+
 function renderCalendar() {
-  populateCalFilters();   // sync filter dropdown options
+  populateCalFilters();
 
   let weekStart = getWeekStart(calendarDate);
   let weekDates = getWeekDates(weekStart);
@@ -940,7 +948,7 @@ function renderCalendar() {
       + `${d6.toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}`;
   }
 
-  // Filter rawSchedule berdasarkan filter aktif
+  // Filter rawSchedule
   let filtered = rawSchedule.filter(s => {
     if (calFilterRuangan && (s.ruangan||'') !== calFilterRuangan) return false;
     if (calFilterGuru    && (s.idGuru ||'') !== calFilterGuru)    return false;
@@ -960,104 +968,121 @@ function renderCalendar() {
     }
   }
 
-  let dayNames = ['Sen','Sel','Rab','Kam','Jum','Sab','Min'];
-  let colW = 130, gut = 52;
-  let totalH = (CAL_END_HOUR - CAL_START_HOUR + 1) * CAL_HOUR_PX + 40;
+  let dayNames = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
+  let totalHours = CAL_END_HOUR - CAL_START_HOUR + 1;
+  let bodyW = totalHours * CAL_HOUR_W;
+  let totalW = CAL_GUTTER_W + bodyW;
 
-  let html = `<div style="display:flex;flex-direction:column;min-width:${gut+7*colW}px;font-family:inherit;">`;
+  let html = `<div style="min-width:${totalW}px;font-family:inherit;">`;
 
-  // Header
-  html += `<div style="display:flex;position:sticky;top:0;z-index:20;background:#fff;border-bottom:2px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,0.06);">`;
-  html += `<div style="width:${gut}px;flex-shrink:0;background:#f8fafc;"></div>`;
-  weekDates.forEach((date,i) => {
+  // ── HEADER: kolom waktu (sticky top) ──
+  html += `<div style="display:flex;position:sticky;top:0;z-index:20;background:#fff;border-bottom:2px solid #cbd5e1;box-shadow:0 2px 8px rgba(0,0,0,0.06);">`;
+  html += `<div style="width:${CAL_GUTTER_W}px;flex-shrink:0;background:#f8fafc;border-right:2px solid #cbd5e1;"></div>`;
+  html += `<div style="flex:1;display:flex;">`;
+  for (let h = CAL_START_HOUR; h <= CAL_END_HOUR; h++) {
+    html += `<div style="width:${CAL_HOUR_W}px;flex-shrink:0;text-align:center;padding:10px 4px;border-left:1px solid #e2e8f0;font-weight:700;font-size:13px;color:#3c4043;background:#f8fafc;">${String(h).padStart(2,'0')}:00</div>`;
+  }
+  html += `</div></div>`;
+
+  // ── BODY: 7 baris hari ──
+  weekDates.forEach((date, dayIdx) => {
     let ds = toLocalDateStr(date);
     let isToday = ds === today;
-    html += `<div style="flex:1;min-width:${colW}px;text-align:center;padding:8px 4px 6px;border-left:1px solid #e2e8f0;background:${isToday?'#f0f4ff':'#f8fafc'};">
-      <div style="font-size:10px;font-weight:700;color:#70757a;text-transform:uppercase;letter-spacing:0.8px;">${dayNames[i]}</div>
-      <div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:3px auto 0;font-size:20px;font-weight:400;background:${isToday?'#1a73e8':'transparent'};color:${isToday?'#fff':'#3c4043'};">${date.getDate()}</div>
-    </div>`;
-  });
-  html += `</div>`;
-
-  html += `<div style="display:flex;position:relative;">`;
-
-  // Time gutter
-  html += `<div style="width:${gut}px;flex-shrink:0;position:sticky;left:0;z-index:10;background:#fff;border-right:1px solid #e2e8f0;">`;
-  for (let h = CAL_START_HOUR; h <= CAL_END_HOUR; h++)
-    html += `<div style="height:${CAL_HOUR_PX}px;display:flex;align-items:flex-start;justify-content:flex-end;padding:4px 6px 0;font-size:10px;font-weight:600;color:#70757a;border-top:1px solid #f1f5f9;">${String(h).padStart(2,'0')}:00</div>`;
-  html += `<div style="height:40px;"></div></div>`;
-
-  // 7 kolom hari
-  weekDates.forEach((date, dayIdx) => {
-    let ds      = toLocalDateStr(date);
-    let isToday = ds === today;
     let daySched = filtered.filter(s => s.tgl && s.tgl.split('T')[0] === ds);
+    let dayLaid = layoutDaySchedules(daySched);
 
-    html += `<div style="flex:1;min-width:${colW}px;position:relative;border-left:1px solid #e2e8f0;height:${totalH}px;background:${isToday?'#fafbff':'#fff'};">`;
+    let maxCols = dayLaid.length > 0 ? Math.max(1, ...dayLaid.map(s => s._maxCols)) : 1;
+    let rowH = Math.max(CAL_MIN_ROW_H, maxCols * (CAL_BLOCK_H + CAL_BLOCK_GAP) + 8);
 
-    // Slot klik (z-index 1 supaya berada DI BAWAH blok jadwal tapi tetap di atas background)
+    html += `<div style="display:flex;border-bottom:2px solid #cbd5e1;">`;
+
+    // Day label (sticky left)
+    html += `<div style="width:${CAL_GUTTER_W}px;flex-shrink:0;padding:6px 4px;background:${isToday?'#f0f4ff':'#f8fafc'};border-right:2px solid #cbd5e1;position:sticky;left:0;z-index:10;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+      <div style="font-size:11px;font-weight:700;color:#70757a;text-transform:uppercase;letter-spacing:0.6px;">${dayNames[dayIdx]}</div>
+      <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-top:4px;font-size:18px;font-weight:500;background:${isToday?'#1a73e8':'transparent'};color:${isToday?'#fff':'#3c4043'};">${date.getDate()}</div>
+      <div style="font-size:9px;color:#70757a;margin-top:2px;">${date.toLocaleDateString('id-ID',{month:'short'})}</div>
+    </div>`;
+
+    // Day content area
+    html += `<div style="flex:1;position:relative;height:${rowH}px;background:${isToday?'#fafbff':'#fff'};">`;
+
+    // Vertical grid lines + click slots
     for (let h = CAL_START_HOUR; h <= CAL_END_HOUR; h++) {
-      let top = (h - CAL_START_HOUR) * CAL_HOUR_PX;
-      let hh  = String(h).padStart(2,'0');
-      html += `<div style="position:absolute;top:${top}px;left:0;right:0;height:${CAL_HOUR_PX/2}px;border-top:1px solid #f1f5f9;cursor:pointer;transition:background .1s;z-index:1;" onmouseover="this.style.background='rgba(26,115,232,0.05)'" onmouseout="this.style.background=''" onclick="onCalSlotClick(event,'${ds}',${h},0)" title="${hh}:00"></div>`;
-      html += `<div style="position:absolute;top:${top+CAL_HOUR_PX/2}px;left:0;right:0;height:${CAL_HOUR_PX/2}px;border-top:1px dashed #f1f5f9;cursor:pointer;transition:background .1s;z-index:1;" onmouseover="this.style.background='rgba(26,115,232,0.05)'" onmouseout="this.style.background=''" onclick="onCalSlotClick(event,'${ds}',${h},30)" title="${hh}:30"></div>`;
+      let x = (h - CAL_START_HOUR) * CAL_HOUR_W;
+      let hh = String(h).padStart(2,'0');
+      // Garis vertikal full hour (tebal)
+      html += `<div style="position:absolute;left:${x}px;top:0;bottom:0;width:0;border-left:2px solid #cbd5e1;pointer-events:none;z-index:0;"></div>`;
+      // Garis vertikal half hour (dashed)
+      html += `<div style="position:absolute;left:${x+CAL_HOUR_W/2}px;top:0;bottom:0;width:0;border-left:1px dashed #e2e8f0;pointer-events:none;z-index:0;"></div>`;
+      // Click slot full hour
+      html += `<div style="position:absolute;left:${x}px;top:0;bottom:0;width:${CAL_HOUR_W/2}px;cursor:pointer;transition:background .1s;z-index:1;" onmouseover="this.style.background='rgba(26,115,232,0.06)'" onmouseout="this.style.background=''" onclick="onCalSlotClick(event,'${ds}',${h},0)" title="${hh}:00"></div>`;
+      // Click slot half hour
+      html += `<div style="position:absolute;left:${x+CAL_HOUR_W/2}px;top:0;bottom:0;width:${CAL_HOUR_W/2}px;cursor:pointer;transition:background .1s;z-index:1;" onmouseover="this.style.background='rgba(26,115,232,0.06)'" onmouseout="this.style.background=''" onclick="onCalSlotClick(event,'${ds}',${h},30)" title="${hh}:30"></div>`;
     }
 
-    // ── BLOK JADWAL dengan layout overlap (side-by-side) ──
-    let dayLaid = layoutDaySchedules(daySched);
+    // ── BLOK JADWAL (horizontal, stack vertikal kalau overlap) ──
     dayLaid.forEach(s => {
-      let pos = getCalBlockPos(s.jamMulai, s.jamBerakhir); if (!pos) return;
-      let c   = getRoomColor(s.ruangan);
-      // Layout: sisakan 12% kanan untuk klik tambah jadwal di waktu yang sama
-      let availWidth = 88;  // %
-      let blockW = availWidth / s._maxCols;
-      let blockL = s._col * blockW;
-      // Visibility tiered berdasarkan tinggi
-      let showSub  = pos.h > 30;
-      let showGuru = pos.h > 46;
-      let showTime = pos.h > 62;
+      let t1 = parseJamRobust(s.jamMulai);
+      let t2 = parseJamRobust(s.jamBerakhir);
+      if (!t1 || !t2) return;
+      let startMin = (t1.h - CAL_START_HOUR)*60 + t1.m;
+      let endMin   = (t2.h - CAL_START_HOUR)*60 + t2.m;
+      if (endMin <= 0 || startMin >= totalHours*60) return;
+
+      let posX    = startMin/60 * CAL_HOUR_W;
+      let widthPx = Math.max((endMin-startMin)/60 * CAL_HOUR_W, 50);
+      let posY    = (s._col || 0) * (CAL_BLOCK_H + CAL_BLOCK_GAP) + 4;
+      let c       = getRoomColor(s.ruangan);
+
+      // Visibility tiered berdasarkan LEBAR block
+      let showSub  = widthPx > 80;
+      let showGuru = widthPx > 110;
+      let showTime = widthPx > 140;
 
       html += `<div
-        style="position:absolute;top:${pos.t+2}px;height:${Math.max(pos.h-4,16)}px;
-               left:calc(${blockL}% + 2px);width:calc(${blockW}% - 4px);
+        style="position:absolute;left:${posX+2}px;width:${widthPx-4}px;top:${posY}px;height:${CAL_BLOCK_H}px;
                background:${c.bg};border-left:3px solid ${c.border};border-radius:4px;
-               padding:3px 5px;cursor:pointer;overflow:hidden;z-index:5;
-               box-shadow:0 1px 3px rgba(0,0,0,0.1);transition:filter .15s;"
+               padding:3px 6px;cursor:pointer;overflow:hidden;z-index:5;
+               box-shadow:0 1px 3px rgba(0,0,0,0.1);transition:filter .15s;display:flex;flex-direction:column;justify-content:center;"
         onmouseover="this.style.filter='brightness(.95)'"
         onmouseout="this.style.filter=''"
         onclick="event.stopPropagation();onCalBlockClick(${s.rowIndex})"
         title="${s.mapel} \u00b7 ${s.kelas}&#10;Ruangan: ${s.ruangan}&#10;Guru: ${s.namaGuru}&#10;${s.jamMulai}\u2013${s.jamBerakhir}">
-        <div style="font-size:11px;font-weight:700;color:${c.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;">${s.mapel}</div>
-        ${showSub  ? `<div style="font-size:9px;color:${c.text};opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;">${s.ruangan} \u00b7 ${s.kelas}</div>` : ''}
-        ${showGuru ? `<div style="font-size:9px;color:${c.text};opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;"><i class="fas fa-user-tie me-1" style="font-size:8px;"></i>${s.namaGuru||'-'}</div>` : ''}
-        ${showTime ? `<div style="font-size:9px;color:${c.text};opacity:.7;line-height:1.3;">${s.jamMulai}\u2013${s.jamBerakhir}</div>` : ''}
+        <div style="font-size:11px;font-weight:700;color:${c.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">${s.mapel}${showSub ? ` <span style="font-weight:400;opacity:.85;">\u00b7 ${s.kelas}</span>` : ''}</div>
+        ${showGuru ? `<div style="font-size:9px;color:${c.text};opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;"><i class="fas fa-user-tie me-1" style="font-size:8px;"></i>${s.namaGuru||'-'} \u00b7 ${s.ruangan}</div>` : ''}
+        ${showTime ? `<div style="font-size:9px;color:${c.text};opacity:.75;line-height:1.2;">${s.jamMulai}\u2013${s.jamBerakhir}</div>` : ''}
       </div>`;
     });
 
-    // Garis waktu sekarang
+    // Garis waktu sekarang (vertical) — hanya di row hari ini
     if (isToday) {
-      let nm = (now.getHours()-CAL_START_HOUR)*60+now.getMinutes();
+      let nm = (now.getHours() - CAL_START_HOUR) * 60 + now.getMinutes();
       if (nm >= 0 && now.getHours() <= CAL_END_HOUR) {
-        let nt = nm/60*CAL_HOUR_PX;
-        html += `<div style="position:absolute;top:${nt}px;left:0;right:0;height:2px;background:#ea4335;z-index:15;pointer-events:none;">
-                   <div style="position:absolute;left:-5px;top:-4px;width:10px;height:10px;background:#ea4335;border-radius:50%;"></div>
+        let nx = nm/60 * CAL_HOUR_W;
+        html += `<div style="position:absolute;left:${nx}px;top:0;bottom:0;width:2px;background:#ea4335;z-index:15;pointer-events:none;">
+                   <div style="position:absolute;top:-5px;left:-4px;width:10px;height:10px;background:#ea4335;border-radius:50%;"></div>
                  </div>`;
       }
     }
-    html += `</div>`;
+
+    html += `</div>`;  // close day content
+    html += `</div>`;  // close day row
   });
 
-  html += `</div></div>`;
+  html += `</div>`;
   document.getElementById('calendarGrid').innerHTML = html;
 
+  // Auto-scroll HORIZONTAL ke jam sekarang (kalau hari ini ada di minggu yg ditampilkan)
   let g = document.getElementById('calendarGrid');
   let inWeek = weekDates.some(d => toLocalDateStr(d) === today);
   setTimeout(() => {
-    g.scrollTop = (inWeek && now.getHours() >= CAL_START_HOUR)
-      ? Math.max(0, (now.getHours()-CAL_START_HOUR-1)*CAL_HOUR_PX)
+    g.scrollLeft = (inWeek && now.getHours() >= CAL_START_HOUR)
+      ? Math.max(0, (now.getHours() - CAL_START_HOUR - 1) * CAL_HOUR_W)
       : 0;
+    g.scrollTop = 0;
   }, 50);
 }
+
 
 
 // ==========================================
@@ -1080,23 +1105,23 @@ function onCalSlotClick(event, dateStr, hour, minute) {
 
 function showPreviewBlock(slotEl, h1, m1, h2, m2) {
   document.querySelectorAll('.cal-preview-block').forEach(el => el.remove());
-  let colEl    = slotEl.parentElement;
-  let startMin = (h1 - CAL_START_HOUR)*60 + m1;
-  let endMin   = (h2 - CAL_START_HOUR)*60 + m2;
-  let top    = startMin/60*CAL_HOUR_PX;
-  let height = Math.max((endMin-startMin)/60*CAL_HOUR_PX, 28);
+  let dayEl = slotEl.parentElement;  // day content area
+
+  let startMin = (h1 - CAL_START_HOUR) * 60 + m1;
+  let endMin   = (h2 - CAL_START_HOUR) * 60 + m2;
+  let left  = startMin / 60 * CAL_HOUR_W;
+  let width = Math.max((endMin - startMin) / 60 * CAL_HOUR_W, 60);
 
   let block = document.createElement('div');
   block.className = 'cal-preview-block';
-  block.style.cssText = `position:absolute;top:${top+2}px;height:${height-4}px;left:2px;right:2px;
-    background:#c2d7f7;border-left:3px solid #1a73e8;border-radius:4px;padding:3px 6px;
-    z-index:8;pointer-events:none;border:1px solid #1a73e8;`;
-  block.innerHTML = `<div style="font-size:11px;font-weight:700;color:#1558b0;line-height:1.4;">
-    (Jadwal Baru)<br>
-    <span style="font-weight:400;">${String(h1).padStart(2,'0')}:${String(m1).padStart(2,'0')} – ${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}</span>
-  </div>`;
-  colEl.appendChild(block);
+  block.style.cssText = `position:absolute;left:${left+2}px;width:${width-4}px;top:4px;height:${CAL_BLOCK_H}px;
+    background:#c2d7f7;border-left:3px solid #1a73e8;border-radius:4px;padding:3px 8px;
+    z-index:8;pointer-events:none;border:1px solid #1a73e8;display:flex;flex-direction:column;justify-content:center;`;
+  block.innerHTML = `<div style="font-size:11px;font-weight:700;color:#1558b0;line-height:1.3;">(Jadwal Baru)</div>
+    <div style="font-size:10px;color:#1558b0;font-weight:500;">${String(h1).padStart(2,'0')}:${String(m1).padStart(2,'0')} \u2013 ${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}</div>`;
+  dayEl.appendChild(block);
 }
+
 
 function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
   let popup   = document.getElementById('calQuickPopup');
@@ -1114,33 +1139,39 @@ function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
   document.getElementById('qpJamBerakhir').value = jamBerakhir;
   onQpTimeChange();
 
-  // Ruangan SELECT (dari master data)
-  let qpR = document.getElementById('qpRuangan');
-  qpR.innerHTML = '<option value="">-- Pilih Ruangan --</option>' +
-    rawRuangan.map(r=>`<option value="${r.ruangan}">${r.ruangan}</option>`).join('');
+  // Datalist Ruangan
+  let dlR = document.getElementById('qpRuanganOptions');
+  if (dlR) dlR.innerHTML = rawRuangan.map(r=>`<option value="${r.ruangan}">`).join('');
 
-  // Kelas SELECT
-  let qpK = document.getElementById('qpKelas');
-  let kHtml = '<option value="">-- Pilih Kelas --</option>';
-  jenjangSistem.forEach(j => j.daftar.forEach(k => { kHtml += `<option value="${k}">${k}</option>`; }));
-  qpK.innerHTML = kHtml;
+  // Datalist Kelas
+  let dlK = document.getElementById('qpKelasOptions');
+  if (dlK) {
+    let html = '';
+    jenjangSistem.forEach(j => j.daftar.forEach(k => { html += `<option value="${k}">`; }));
+    dlK.innerHTML = html;
+  }
 
-  // Mapel SELECT — populate dari master data (semua mapel dulu, akan di-filter saat kelas dipilih)
-  let qpM = document.getElementById('qpMapel');
-  let uniqueMapel = [...new Set(rawMapel.map(m=>m.mapel))];
-  qpM.innerHTML = '<option value="">-- Pilih Mata Pelajaran --</option>' +
-    uniqueMapel.map(m=>`<option value="${m}">${m}</option>`).join('');
+  // Datalist Mapel (semua mapel, akan di-filter saat kelas dipilih)
+  let dlM = document.getElementById('qpMapelOptions');
+  if (dlM) {
+    let uniqueMapel = [...new Set(rawMapel.map(m=>m.mapel))];
+    dlM.innerHTML = uniqueMapel.map(m=>`<option value="${m}">`).join('');
+  }
 
-  // Guru SELECT
-  let qpG = document.getElementById('qpGuru');
-  let seen = new Set();
-  let gHtml = '<option value="">-- Pilih Guru --</option>';
-  rawGuru.forEach(g => {
-    if (!seen.has(g.id)) { seen.add(g.id); gHtml += `<option value="${g.id} - ${g.nama}">${g.id} - ${g.nama}</option>`; }
-  });
-  qpG.innerHTML = gHtml;
+  // Datalist Guru
+  let dlG = document.getElementById('qpGuruOptions');
+  if (dlG) {
+    let seen = new Set();
+    let opts = '';
+    rawGuru.forEach(g => {
+      if (!seen.has(g.id)) { seen.add(g.id); opts += `<option value="${g.id} - ${g.nama}">`; }
+    });
+    dlG.innerHTML = opts;
+  }
 
-  // Reset fields
+  // Reset SEMUA field ke kondisi awal (start fresh setiap kali popup dibuka)
+  document.getElementById('qpKelas').value    = '';
+  document.getElementById('qpRuangan').value  = '';
   document.getElementById('qpMapel').value    = '';
   document.getElementById('qpGuru').value     = '';
   document.getElementById('qpNamaGuru').value = '';
@@ -1148,6 +1179,9 @@ function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
   document.getElementById('qpRecurringWrapper').style.display = 'none';
   document.getElementById('qpRecurringInfo').innerText = '';
   document.getElementById('qpKonflikWarning').style.display  = 'none';
+  // Reset tipe sesi ke Offline (default)
+  let qpOff = document.getElementById('qpTipeOffline');
+  if (qpOff) qpOff.checked = true;
 
   // Set default tanggal "sampai" = 1 bulan ke depan
   let until = new Date(dateStr + 'T12:00:00');
@@ -1316,6 +1350,12 @@ function simpanQuickPopup() {
   if (!ruangan) { tampilkanToast('Isi nama ruangan!', 'warning');               return; }
   if (!mulai || !akhir) { tampilkanToast('Isi jam mulai & berakhir!','warning'); return; }
   if (isRecurring && !untilDate) { tampilkanToast('Isi tanggal akhir pengulangan!','warning'); return; }
+
+  // ── Validasi combobox: value harus ada di datalist ──
+  if (!isValidComboValue('qpKelas'))   { tampilkanToast('\u26a0\ufe0f Kelas tidak valid! Pilih dari daftar suggestion.','warning');           return; }
+  if (!isValidComboValue('qpMapel'))   { tampilkanToast('\u26a0\ufe0f Mata Pelajaran tidak valid! Pilih dari daftar suggestion.','warning'); return; }
+  if (!isValidComboValue('qpRuangan')) { tampilkanToast('\u26a0\ufe0f Ruangan tidak valid! Pilih dari daftar suggestion.','warning');         return; }
+  if (!isValidComboValue('qpGuru'))    { tampilkanToast('\u26a0\ufe0f Guru tidak valid! Pilih dari daftar suggestion.','warning');           return; }
 
   let dates = isRecurring
     ? getRecurringDates(calPreviewInfo.dateStr, untilDate)
@@ -1599,40 +1639,23 @@ function fetchMasterData(callback) {
 
 // Update semua datalist & select yang butuh mapel/ruangan
 function updateMasterDataLists() {
-  // ── SELECT MATA PELAJARAN (semua mapel unik, untuk form yang tidak filter by kelas) ──
+  // ── DATALIST MATA PELAJARAN ──
   let uniqueMapel = [...new Set(rawMapel.map(m => m.mapel))];
-  // hMapel & gMapel: tampilkan semua mapel (tidak filter)
-  ['hMapel','gMapel'].forEach(id => {
+  let mapelOpts   = uniqueMapel.map(m => `<option value="${m}">`).join('');
+  // semua datalist mapel
+  ['sMapelOptions','qpMapelOptions','gMapelOptions'].forEach(id => {
     let el = document.getElementById(id);
-    if (el) {
-      let cur = el.value;
-      el.innerHTML = '<option value="">-- Pilih Mata Pelajaran --</option>' +
-        uniqueMapel.map(m => `<option value="${m}">${m}</option>`).join('');
-      if (cur) setSelectValueSafe(id, cur);
-    }
-  });
-  // sMapel & qpMapel: akan di-filter by kelas saat onScheduleKelasChange/onQpKelasChange
-  // tetapi default: tampilkan semua dulu
-  ['sMapel','qpMapel'].forEach(id => {
-    let el = document.getElementById(id);
-    if (el && el.options.length <= 1) {
-      el.innerHTML = '<option value="">-- Pilih Mata Pelajaran --</option>' +
-        uniqueMapel.map(m => `<option value="${m}">${m}</option>`).join('');
-    }
+    if (el) el.innerHTML = mapelOpts;
   });
 
-  // ── SELECT RUANGAN ──
-  ['sRuangan','qpRuangan'].forEach(id => {
+  // ── DATALIST RUANGAN ──
+  let ruanganOpts = rawRuangan.map(r => `<option value="${r.ruangan}">`).join('');
+  ['sRuanganOptions','qpRuanganOptions'].forEach(id => {
     let el = document.getElementById(id);
-    if (el) {
-      let cur = el.value;
-      el.innerHTML = '<option value="">-- Pilih Ruangan --</option>' +
-        rawRuangan.map(r => `<option value="${r.ruangan}">${r.ruangan}</option>`).join('');
-      if (cur) setSelectValueSafe(id, cur);
-    }
+    if (el) el.innerHTML = ruanganOpts;
   });
 
-  // ── Filter kelas di section Data Mata Pelajaran ──
+  // ── Filter kelas di section Data Mata Pelajaran (masih <select>) ──
   let kelasSet = [...new Set(rawMapel.map(m => m.kelas).filter(Boolean))].sort();
   let fmKelas  = document.getElementById('fmKelas');
   if (fmKelas) {
@@ -1654,26 +1677,22 @@ function getMapelByKelas(kelas) {
 function onScheduleKelasChange() {
   let kelas  = document.getElementById('sKelas').value;
   let mapels = getMapelByKelas(kelas);
-  let el     = document.getElementById('sMapel');
-  if (el) {
-    let cur = el.value;
-    el.innerHTML = '<option value="">-- Pilih Mata Pelajaran --</option>' +
-      mapels.map(m => `<option value="${m}">${m}</option>`).join('');
-    if (cur && mapels.includes(cur)) el.value = cur;
-  }
+  let dl = document.getElementById('sMapelOptions');
+  if (dl) dl.innerHTML = mapels.map(m => `<option value="${m}">`).join('');
+  // Filter guru juga sesuai kelas (+ mapel kalau sudah dipilih)
+  let mapel = document.getElementById('sMapel').value;
+  updateGuruDatalistFiltered('sGuruOptions', kelas, mapel);
   autoFillHonorSesi();
 }
 
 function onQpKelasChange() {
   let kelas  = document.getElementById('qpKelas').value;
   let mapels = getMapelByKelas(kelas);
-  let el     = document.getElementById('qpMapel');
-  if (el) {
-    let cur = el.value;
-    el.innerHTML = '<option value="">-- Pilih Mata Pelajaran --</option>' +
-      mapels.map(m => `<option value="${m}">${m}</option>`).join('');
-    if (cur && mapels.includes(cur)) el.value = cur;
-  }
+  let dl = document.getElementById('qpMapelOptions');
+  if (dl) dl.innerHTML = mapels.map(m => `<option value="${m}">`).join('');
+  // Filter guru juga sesuai kelas (+ mapel kalau sudah dipilih)
+  let mapel = document.getElementById('qpMapel').value;
+  updateGuruDatalistFiltered('qpGuruOptions', kelas, mapel);
   cekKonflikQuickPopup();
 }
 
@@ -1768,6 +1787,7 @@ function submitMapel() {
     honorOnline  : getRawNumber('mpHonorOnline')
   };
   if (!payload.mapel || !payload.kelas) { tampilkanToast('Mapel & Kelas wajib diisi!','warning'); return; }
+  if (!isValidComboValue('mpKelas')) { tampilkanToast('\u26a0\ufe0f Kelas tidak valid! Pilih dari daftar suggestion.','warning'); return; }
   setTombolLoading('btnSimpanMapel', true, 'Menyimpan...');
   tampilkanLoading('Menyimpan...');
   google.script.run
@@ -1952,6 +1972,7 @@ function submitGuru() {
   document.querySelectorAll('.chk-guru-kelas:checked').forEach(cb => kelasArr.push(cb.value));
   if (!mapel) { tampilkanToast('Mata pelajaran wajib diisi!', 'warning'); return; }
   if (kelasArr.length === 0) { tampilkanToast('Pilih minimal satu kelas!', 'warning'); return; }
+  if (!isValidComboValue('gMapel')) { tampilkanToast('\u26a0\ufe0f Mata Pelajaran tidak valid! Pilih dari daftar suggestion.','warning'); return; }
   let payload = { rowIndex: rowIndex, mapel: mapel, kelasArr: kelasArr };
   if (rowIndex) {
     payload.namaBaru = document.getElementById('gNamaBaru').value.trim();
@@ -1962,6 +1983,7 @@ function submitGuru() {
       payload.idGuru = '';
       if (!payload.namaBaru) { tampilkanToast('Nama guru wajib diisi!', 'warning'); return; }
     } else {
+      if (!isValidComboValue('gGuruSearch')) { tampilkanToast('\u26a0\ufe0f Guru tidak valid! Pilih dari daftar suggestion.','warning'); return; }
       payload.idGuru = document.getElementById('gGuruSearch').value.split(' - ')[0].trim();
       if (!payload.idGuru) { tampilkanToast('Pilih guru yang sudah ada!', 'warning'); return; }
     }
@@ -2165,6 +2187,12 @@ function submitSchedule() {
     tampilkanToast('Tanggal, Kelas, Mata Pelajaran, dan Guru wajib diisi!', 'warning'); return;
   }
 
+  // ── Validasi combobox: value harus ada di datalist (data validation) ──
+  if (!isValidComboValue('sKelas'))      { tampilkanToast('\u26a0\ufe0f Kelas tidak valid! Pilih dari daftar suggestion.','warning');           return; }
+  if (!isValidComboValue('sMapel'))      { tampilkanToast('\u26a0\ufe0f Mata Pelajaran tidak valid! Pilih dari daftar suggestion.','warning'); return; }
+  if (!isValidComboValue('sRuangan'))    { tampilkanToast('\u26a0\ufe0f Ruangan tidak valid! Pilih dari daftar suggestion.','warning');         return; }
+  if (!isValidComboValue('sGuruSearch')) { tampilkanToast('\u26a0\ufe0f Guru tidak valid! Pilih dari daftar suggestion.','warning');           return; }
+
   // ── CEK KONFLIK ruangan/waktu sebelum simpan ──
   let excludeRow = payload.rowIndex ? parseInt(payload.rowIndex) : null;
   let konflik = cekKonflik(payload.ruangan, payload.tgl, payload.jamMulai, payload.jamBerakhir, excludeRow);
@@ -2287,11 +2315,23 @@ function moveRoom(idx, dir) {
 // ==========================================
 
 // Populate dropdown kelas (untuk modal honor, mapel, etc.)
-function populateKelasSelect(selectId) {
+function populateKelasSelect(elId) {
+  let el = document.getElementById(elId);
+  if (!el) return;
+  // Kalau element ini <input list="...">, populate datalist-nya
+  if (el.tagName === 'INPUT' && el.getAttribute('list')) {
+    let dl = document.getElementById(el.getAttribute('list'));
+    if (dl) {
+      let html = '';
+      jenjangSistem.forEach(j => j.daftar.forEach(cls => { html += `<option value="${cls}">`; }));
+      dl.innerHTML = html;
+    }
+    return;
+  }
+  // Kalau <select>, populate option biasa
   let html = '<option value="">-- Pilih Kelas --</option>';
   jenjangSistem.forEach(j => j.daftar.forEach(cls => { html += `<option value="${cls}">${cls}</option>`; }));
-  let el = document.getElementById(selectId);
-  if (el) el.innerHTML = html;
+  el.innerHTML = html;
 }
 
 // Generate kelas checkboxes untuk form guru
@@ -2335,29 +2375,71 @@ function applyPillVisual(el, isOn) {
 }
 
 // Update datalist guru untuk autocomplete
-function updateGuruDatalistOptions() {
-  let seen = new Set();
-  let opts = '<option value="">-- Pilih Guru --</option>';
-  rawGuru.forEach(g => {
-    if (!seen.has(g.id)) {
-      seen.add(g.id);
-      opts += `<option value="${g.id} - ${g.nama}">${g.id} - ${g.nama}</option>`;
-    }
-  });
-  ['sGuruSearch','gGuruSearch','qpGuru'].forEach(id => {
-    let el = document.getElementById(id);
-    if (el) {
-      let cur = el.value;
-      el.innerHTML = opts;
-      if (cur) setSelectValueSafe(id, cur);
-    }
+
+// Cari guru yang mengajar kelas DAN mapel tertentu
+function getGuruByKelasMapel(kelas, mapel) {
+  return rawGuru.filter(g => {
+    let kelasList = (g.kelas || '').split(',').map(k => k.trim().toLowerCase());
+    let mapelMatch = !mapel || (g.mapel || '').toLowerCase() === mapel.toLowerCase();
+    let kelasMatch = !kelas || kelasList.includes(kelas.toLowerCase());
+    return mapelMatch && kelasMatch;
   });
 }
 
-// Helper: set nilai select dengan aman; kalau opsi belum ada, tambahkan (untuk data legacy)
-function setSelectValueSafe(selectId, value) {
-  let el = document.getElementById(selectId);
+// Update datalist guru sesuai filter kelas+mapel (unique per ID)
+function updateGuruDatalistFiltered(datalistId, kelas, mapel) {
+  let dl = document.getElementById(datalistId);
+  if (!dl) return;
+  let filtered = getGuruByKelasMapel(kelas, mapel);
+  let seen = new Set();
+  let opts = '';
+  filtered.forEach(g => {
+    if (!seen.has(g.id)) { seen.add(g.id); opts += `<option value="${g.id} - ${g.nama}">`; }
+  });
+  dl.innerHTML = opts;
+}
+
+// Handler saat sMapel berubah di modal Schedule
+function onSMapelChange() {
+  autoFillHonorSesi();
+  let kelas = document.getElementById('sKelas').value;
+  let mapel = document.getElementById('sMapel').value;
+  updateGuruDatalistFiltered('sGuruOptions', kelas, mapel);
+}
+
+// Handler saat qpMapel berubah di quick popup
+function onQpMapelChange() {
+  let kelas = document.getElementById('qpKelas').value;
+  let mapel = document.getElementById('qpMapel').value;
+  updateGuruDatalistFiltered('qpGuruOptions', kelas, mapel);
+}
+
+function updateGuruDatalistOptions() {
+  let seen = new Set();
+  let opts = '';
+  rawGuru.forEach(g => {
+    if (!seen.has(g.id)) {
+      seen.add(g.id);
+      opts += `<option value="${g.id} - ${g.nama}">`;
+    }
+  });
+  // Populate datalist (bukan select lagi)
+  ['sGuruOptions','gGuruOptions','qpGuruOptions'].forEach(id => {
+    let el = document.getElementById(id);
+    if (el) el.innerHTML = opts;
+  });
+}
+
+// Helper: set nilai input/select dengan aman (handle both)
+function setSelectValueSafe(elId, value) {
+  let el = document.getElementById(elId);
   if (!el || !value) return;
+  if (el.tagName === 'INPUT') {
+    // Untuk input+datalist: cukup set value, tidak perlu tambah option
+    el.value = value;
+    return;
+  }
+  // Untuk <select>: tambahkan option kalau belum ada (data legacy)
   let found = false;
   for (let opt of el.options) { if (opt.value === value) { found = true; break; } }
   if (!found) {
@@ -2367,6 +2449,27 @@ function setSelectValueSafe(selectId, value) {
     el.add(opt);
   }
   el.value = value;
+}
+
+// Helper: validasi value input thd datalist-nya. Return true kalau valid (atau kosong).
+function isValidComboValue(inputId) {
+  let el = document.getElementById(inputId);
+  if (!el) return true;
+  if (el.tagName !== 'INPUT') return true;  // bukan combobox
+  let dlId = el.getAttribute('list');
+  if (!dlId) return true;
+  let dl = document.getElementById(dlId);
+  if (!dl) return true;
+  let val = (el.value || '').trim();
+  if (!val) return true;   // empty handled by required validation
+  let opts = dl.querySelectorAll('option');
+  for (let opt of opts) {
+    if (opt.value.toLowerCase() === val.toLowerCase()) {
+      el.value = opt.value;   // normalize ke value canonical (case match)
+      return true;
+    }
+  }
+  return false;
 }
 
 // ── TABEL DATA GURU (grouped by ID) ──

@@ -482,7 +482,7 @@
           <form id="formSiswa" onsubmit="event.preventDefault();">
             <input type="hidden" id="mIdHidden">
             <div class="mb-3"><label class="small fw-bold text-muted mb-1">Nama Lengkap</label><input type="text" class="form-control" id="mNama" required></div>
-            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Kelas</label><select class="form-select" id="mKelas" required><option value="">-- Pilih Kelas --</option></select></div>
+            <div class="mb-3"><label class="small fw-bold text-muted mb-1">Kelas</label><input list="mKelasOptions" type="text" class="form-control" id="mKelas" placeholder="Ketik / pilih kelas..." autocomplete="off" required><datalist id="mKelasOptions"></datalist></div>
             <div class="row mb-3">
               <div class="col-6"><label class="small fw-bold text-muted mb-1">Status</label><select class="form-select" id="mStatus"><option value="Aktif">Aktif</option><option value="Tidak Aktif">Tidak Aktif</option><option value="Cuti">Cuti</option><option value="Lulus">Lulus</option></select></div>
               <div class="col-6"><label class="small fw-bold text-muted mb-1">Tipe Bayar</label><select class="form-select" id="mTipe"><option value="Bulanan">Bulanan</option><option value="Semesteran">Semesteran</option></select></div>
@@ -533,7 +533,7 @@
             <!-- Search guru yang sudah ada -->
             <div class="mb-3 d-none" id="gSearchWrapper">
               <label class="small fw-bold text-muted mb-1">Cari Guru yang Ada (Ketik Nama / ID)</label>
-              <select class="form-select" id="gGuruSearch" onchange="onGuruModalSearchChange()"><option value="">-- Pilih Guru --</option></select>
+              <input list="gGuruOptions" type="text" class="form-control" id="gGuruSearch" placeholder="Ketik nama/ID guru..." autocomplete="off" oninput="onGuruModalSearchChange()" onchange="onGuruModalSearchChange()"><datalist id="gGuruOptions"></datalist>
             </div>
 
             <!-- Nama terkonfirmasi untuk guru yang ada -->
@@ -545,7 +545,7 @@
             <!-- Mata Pelajaran -->
             <div class="mb-3">
               <label class="small fw-bold text-muted mb-1">Mata Pelajaran</label>
-              <select class="form-select" id="gMapel" required><option value="">-- Pilih Mata Pelajaran --</option></select>
+              <input list="gMapelOptions" type="text" class="form-control" id="gMapel" placeholder="Ketik / pilih mata pelajaran..." autocomplete="off" required><datalist id="gMapelOptions"></datalist>
             </div>
 
             <!-- Kelas: checkboxes grouped by jenjang -->
@@ -584,10 +584,10 @@
             </div>
             <div class="row">
               <div class="col-6 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Durasi</label><input type="text" class="form-control bg-light" id="sDurasi" readonly placeholder="Otomatis"></div>
-              <div class="col-6 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Ruangan</label><select class="form-select" id="sRuangan"><option value="">-- Pilih Ruangan --</option></select></div>
+              <div class="col-6 col-md-4 mb-3"><label class="small fw-bold text-muted mb-1">Ruangan</label><input list="sRuanganOptions" type="text" class="form-control" id="sRuangan" placeholder="Ketik / pilih..." autocomplete="off"><datalist id="sRuanganOptions"></datalist></div>
               <div class="col-12 col-md-4 mb-3">
                 <label class="small fw-bold text-muted mb-1">Kelas</label>
-                <select class="form-select" id="sKelas" required onchange="onScheduleKelasChange()"><option value="">-- Pilih Kelas --</option></select>
+                <input list="sKelasOptions" type="text" class="form-control" id="sKelas" placeholder="Ketik / pilih kelas..." autocomplete="off" onchange="onScheduleKelasChange()" required><datalist id="sKelasOptions"></datalist>
               </div>
             </div>
             <div class="mb-3">
@@ -602,11 +602,11 @@
             <div class="row">
               <div class="col-12 col-md-6 mb-3">
                 <label class="small fw-bold text-muted mb-1">Mata Pelajaran</label>
-                <select class="form-select" id="sMapel" onchange="autoFillHonorSesi()" required><option value="">-- Pilih Mata Pelajaran --</option></select>
+                <input list="sMapelOptions" type="text" class="form-control" id="sMapel" placeholder="Ketik / pilih mata pelajaran..." autocomplete="off" oninput="onSMapelChange()" onchange="onSMapelChange()" required><datalist id="sMapelOptions"></datalist>
               </div>
               <div class="col-12 col-md-6 mb-3">
                 <label class="small fw-bold text-muted mb-1">Cari Guru (Nama / ID)</label>
-                <select class="form-select" id="sGuruSearch" onchange="onGuruSearchChange()" required><option value="">-- Pilih Guru --</option></select>
+                <input list="sGuruOptions" type="text" class="form-control" id="sGuruSearch" placeholder="Ketik nama/ID guru..." autocomplete="off" oninput="onGuruSearchChange()" onchange="onGuruSearchChange()" required><datalist id="sGuruOptions"></datalist>
               </div>
             </div>
             <div class="row">
@@ -657,13 +657,12 @@
       <!-- Ruangan (input+datalist = bisa ketik baru) -->
       <div class="mb-2">
         <label style="font-size:10px;font-weight:700;color:#70757a;display:block;margin-bottom:2px;">RUANGAN</label>
-        <select class="form-select form-select-sm" id="qpRuangan" onchange="cekKonflikQuickPopup()" style="border-radius:8px;"><option value="">-- Pilih Ruangan --</option></select>
+        <input list="qpRuanganOptions" type="text" class="form-control form-control-sm" id="qpRuangan" placeholder="Ketik / pilih ruangan..." autocomplete="off" oninput="cekKonflikQuickPopup()" style="border-radius:8px;"><datalist id="qpRuanganOptions"></datalist>
       </div>
       <!-- Kelas -->
       <div class="mb-2">
-        <select class="form-select form-select-sm" id="qpKelas" onchange="onQpKelasChange()" style="border-radius:8px;">
-          <option value="">-- Pilih Kelas --</option>
-        </select>
+        <input list="qpKelasOptions" type="text" class="form-control form-control-sm" id="qpKelas" placeholder="Ketik / pilih kelas..." autocomplete="off" onchange="onQpKelasChange()" style="border-radius:8px;">
+        <datalist id="qpKelasOptions"></datalist>
       </div>
       <!-- Tipe Sesi -->
       <div class="d-flex gap-1 mb-2">
@@ -674,11 +673,11 @@
       </div>
       <!-- Mata Pelajaran -->
       <div class="mb-2">
-        <select class="form-select form-select-sm" id="qpMapel" style="border-radius:8px;"><option value="">-- Pilih Mata Pelajaran --</option></select>
+        <input list="qpMapelOptions" type="text" class="form-control form-control-sm" id="qpMapel" placeholder="Ketik / pilih mata pelajaran..." autocomplete="off" oninput="onQpMapelChange()" onchange="onQpMapelChange()" style="border-radius:8px;"><datalist id="qpMapelOptions"></datalist>
       </div>
       <!-- Guru -->
       <div class="mb-2">
-        <select class="form-select form-select-sm" id="qpGuru" onchange="onQpGuruChange()" style="border-radius:8px;"><option value="">-- Pilih Guru --</option></select>
+        <input list="qpGuruOptions" type="text" class="form-control form-control-sm" id="qpGuru" placeholder="Ketik nama/ID guru..." autocomplete="off" oninput="onQpGuruChange()" onchange="onQpGuruChange()" style="border-radius:8px;"><datalist id="qpGuruOptions"></datalist>
         <input type="hidden" id="qpNamaGuru">
       </div>
       <!-- Toggle: Ulangi setiap minggu -->
@@ -728,7 +727,7 @@
             <div class="mb-3"><label class="small fw-bold text-muted mb-1">Nama Mata Pelajaran</label><input type="text" class="form-control" id="mpNama" placeholder="Contoh: Matematika" required></div>
             <div class="mb-3">
               <label class="small fw-bold text-muted mb-1">Kelas</label>
-              <select class="form-select" id="mpKelas" required><option value="">-- Pilih Kelas --</option></select>
+              <input list="mpKelasOptions" type="text" class="form-control" id="mpKelas" placeholder="Ketik / pilih kelas..." autocomplete="off" required><datalist id="mpKelasOptions"></datalist>
             </div>
             <div class="row g-2 mb-3">
               <div class="col-6">
