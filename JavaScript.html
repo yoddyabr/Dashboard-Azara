@@ -360,9 +360,10 @@ function konfirmasiHapusSiswa(idSiswa, namaSiswa) {
 // MODAL SISWA
 // ==========================================
 function initModalSiswa() { if (!bsModalSiswa) bsModalSiswa = new bootstrap.Modal(document.getElementById('modalSiswa')); }
-function bukaModalTambahSiswa() { resetFormSiswaKeDefault(); initModalSiswa(); bsModalSiswa.show(); }
+function bukaModalTambahSiswa() { resetFormSiswaKeDefault(); populateKelasSelect('mKelas'); initModalSiswa(); bsModalSiswa.show(); }
 function siapkanEditSiswa(idSiswa) {
   let s = rawSiswa.find(item => item.id === idSiswa); if (!s) return;
+  populateKelasSelect('mKelas');
   document.getElementById('mIdHidden').value = s.id;
   document.getElementById('mNama').value = s.nama;
   document.getElementById('mKelas').value = s.kelas;
@@ -592,7 +593,6 @@ function autoFillNama() {
   let valInput = document.getElementById('pSiswaSearch').value;
   if (!valInput || valInput.trim() === "") {
     document.getElementById('pNama').value = "";
-    // Reset suggestion pengirim
     let dl = document.getElementById('pPengirimOptions');
     if (dl) dl.innerHTML = '';
     return;
@@ -602,12 +602,13 @@ function autoFillNama() {
   document.getElementById('pNama').value = match ? match.nama : "";
 
   // Populate suggestion Nama Pengirim berdasarkan riwayat pembayaran siswa ini
+  // Property di rawPayment: p.id (bukan p.idSiswa), pengirim default "-"
   let dl = document.getElementById('pPengirimOptions');
   if (dl && match) {
     let pengirimSet = new Set();
     rawPayment.forEach(p => {
-      if ((p.idSiswa||"").toString().toUpperCase() === idSiswa.toUpperCase()
-          && p.pengirim && p.pengirim.trim()) {
+      if ((p.id||"").toString().toUpperCase() === idSiswa.toUpperCase()
+          && p.pengirim && p.pengirim.trim() && p.pengirim.trim() !== '-') {
         pengirimSet.add(p.pengirim.trim());
       }
     });
@@ -2226,6 +2227,8 @@ function siapkanEditSchedule(rowIndex) {
   document.getElementById('txtJudulFormSchedule').innerText = 'Edit Jadwal (' + s.mapel + ' \u00b7 ' + s.kelas + ')';
   document.getElementById('btnSimpanSchedule').innerText = 'Update Jadwal';
   document.getElementById('btnSimpanSchedule').className = 'btn btn-warning w-100 fw-bold py-2';
+  // Tampilkan tombol Hapus hanya di edit mode
+  document.getElementById('btnHapusSchedule').classList.remove('d-none');
   autoFillHonorSesi();
   initModalSchedule();
   bsModalSchedule.show();
@@ -2239,6 +2242,38 @@ function resetFormScheduleKeDefault() {
   document.getElementById('txtJudulFormSchedule').innerText = 'Tambah Jadwal';
   document.getElementById('btnSimpanSchedule').innerText = 'Simpan Jadwal';
   document.getElementById('btnSimpanSchedule').className = 'btn btn-success w-100 fw-bold py-2';
+  // Sembunyikan tombol Hapus (hanya muncul saat edit)
+  let btnHapus = document.getElementById('btnHapusSchedule');
+  if (btnHapus) btnHapus.classList.add('d-none');
+}
+
+// Handler: konfirmasi & hapus jadwal dari modal Edit Schedule
+function konfirmasiHapusScheduleDariModal() {
+  let rowIndex = document.getElementById('sRowIndexHidden').value;
+  if (!rowIndex) { tampilkanToast('Tidak ada jadwal yang dipilih', 'warning'); return; }
+  let kelas = document.getElementById('sKelas').value;
+  let mapel = document.getElementById('sMapel').value;
+  let tgl   = document.getElementById('sTanggal').value;
+  let label = mapel + ' \u00b7 ' + kelas + ' (' + tgl + ')';
+  if (!confirm('Yakin hapus jadwal "' + label + '"?\n\nAksi ini tidak dapat dibatalkan.')) return;
+  tampilkanLoading('Menghapus jadwal...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      let tipe = res.includes('\u2705') ? 'success' : 'warning';
+      tampilkanToast(res, tipe);
+      if (tipe === 'success') {
+        bsModalSchedule.hide();
+        resetFormScheduleKeDefault();
+        scheduleDataLoaded = false;
+        fetchScheduleData(function() { renderCalendar(); });
+      }
+    })
+    .withFailureHandler(err => {
+      sembunyikanLoading();
+      tampilkanToast('\u274c Error: ' + err.message, 'error');
+    })
+    .hapusSchedule(rowIndex);
 }
 function hitungDurasi() {
   let a = document.getElementById('sJamMulai').value;
