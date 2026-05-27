@@ -55,6 +55,10 @@ function getGuruData() {
 //   - kelasArr  : array kelas yang dipilih, e.g. ["SD 1","SD 2"]
 // ==========================================
 function simpanGuru(payload) {
+  // ── NEW: Multi-mapel mode (untuk tambah guru baru / tambah multiple mapel ke guru existing) ──
+  if (payload.mapelGroups && Array.isArray(payload.mapelGroups) && payload.mapelGroups.length > 0 && !payload.rowIndex) {
+    return simpanGuruMultiMapel_(payload);
+  }
   if (!payload.mapel   || payload.mapel.toString().trim()   === "") return "❌ Mata pelajaran tidak boleh kosong!";
   if (!payload.kelasArr || payload.kelasArr.length === 0)           return "❌ Pilih minimal satu kelas!";
 
@@ -122,6 +126,77 @@ function simpanGuru(payload) {
 }
 
 // ==========================================
+
+// ==========================================
+// Multi-mapel: 1 guru, N (mapel,kelas) groups dalam 1 call
+// ==========================================
+function simpanGuruMultiMapel_(payload) {
+  var validGroups = payload.mapelGroups.filter(function(g) {
+    return g.mapel && g.mapel.toString().trim() && g.kelasArr && g.kelasArr.length > 0;
+  });
+  if (validGroups.length === 0) return "❌ Tambahkan minimal 1 mata pelajaran dengan kelas!";
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetGuru = ss.getSheetByName(CONFIG.SHEET_GURU);
+  if (!sheetGuru) {
+    sheetGuru = ss.insertSheet(CONFIG.SHEET_GURU);
+    sheetGuru.appendRow(["ID Guru","Nama Guru","Mata Pelajaran","Kelas"]);
+  }
+
+  var dataGuru = sheetGuru.getDataRange().getValues();
+  var idGuru   = payload.idGuru ? payload.idGuru.toString().trim() : "";
+  var namaGuru = "";
+
+  if (idGuru) {
+    // Guru existing — cari namanya
+    for (var i = 1; i < dataGuru.length; i++) {
+      if (dataGuru[i][0] && dataGuru[i][0].toString().trim() === idGuru) {
+        namaGuru = dataGuru[i][1] ? dataGuru[i][1].toString().trim() : "";
+        break;
+      }
+    }
+    if (!namaGuru) return "❌ ID Guru " + idGuru + " tidak ditemukan!";
+  } else {
+    // Guru baru — generate ID
+    if (!payload.namaBaru || payload.namaBaru.toString().trim() === "") return "❌ Nama guru tidak boleh kosong!";
+    namaGuru = payload.namaBaru.toString().trim();
+    var maxId = 0;
+    for (var m = 1; m < dataGuru.length; m++) {
+      if (dataGuru[m][0]) {
+        var cleanId = parseInt(dataGuru[m][0].toString().replace(/\D/g, ""));
+        if (!isNaN(cleanId) && cleanId > maxId) maxId = cleanId;
+      }
+    }
+    idGuru = "GRU-" + ("000" + (maxId + 1)).slice(-4);
+  }
+
+  var added = 0, updated = 0;
+  validGroups.forEach(function(g) {
+    var mapel = g.mapel.toString().trim();
+    var kelasStr = g.kelasArr.join(', ');
+    var existingRow = -1;
+    for (var i = 1; i < dataGuru.length; i++) {
+      if (dataGuru[i][0] && dataGuru[i][0].toString().trim() === idGuru &&
+          dataGuru[i][2] && dataGuru[i][2].toString().trim().toLowerCase() === mapel.toLowerCase()) {
+        existingRow = i + 1; break;
+      }
+    }
+    if (existingRow > 0) {
+      sheetGuru.getRange(existingRow, 4).setValue(kelasStr);
+      updated++;
+    } else {
+      sheetGuru.appendRow([idGuru, namaGuru, mapel, kelasStr]);
+      added++;
+    }
+  });
+
+  invalidateGuruCache();
+  var parts = [];
+  if (added   > 0) parts.push(added + " mapel baru");
+  if (updated > 0) parts.push(updated + " mapel diperbarui");
+  return "✅ " + namaGuru + " (" + idGuru + "): " + parts.join(", ") + "!";
+}
+
 // 3. HAPUS SATU BARIS DATA GURU
 // ==========================================
 function hapusGuru(rowIndex) {

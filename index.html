@@ -450,7 +450,7 @@
                 </select>
                 <input type="text" class="form-control mt-2 d-none" id="pTransferLainnya" placeholder="Nama bank...">
               </div>
-              <div class="col-6 mb-3"><label class="small fw-bold text-muted mb-1">Nama Pengirim</label><input type="text" class="form-control" id="pPengirim" placeholder="Ayah / Ibu / dll"></div>
+              <div class="col-6 mb-3"><label class="small fw-bold text-muted mb-1">Nama Pengirim</label><input list="pPengirimOptions" type="text" class="form-control" id="pPengirim" placeholder="Ayah / Ibu / dll" autocomplete="off"><datalist id="pPengirimOptions"></datalist></div>
             </div>
             <div class="mb-3" id="wrapperMultiPeriode">
               <label class="small fw-bold text-muted d-block mb-2">Pilih Periode Bulan:</label>
@@ -484,8 +484,8 @@
             <div class="mb-3"><label class="small fw-bold text-muted mb-1">Nama Lengkap</label><input type="text" class="form-control" id="mNama" required></div>
             <div class="mb-3"><label class="small fw-bold text-muted mb-1">Kelas</label><input list="mKelasOptions" type="text" class="form-control" id="mKelas" placeholder="Ketik / pilih kelas..." autocomplete="off" required><datalist id="mKelasOptions"></datalist></div>
             <div class="row mb-3">
-              <div class="col-6"><label class="small fw-bold text-muted mb-1">Status</label><select class="form-select" id="mStatus"><option value="Aktif">Aktif</option><option value="Tidak Aktif">Tidak Aktif</option><option value="Cuti">Cuti</option><option value="Lulus">Lulus</option></select></div>
-              <div class="col-6"><label class="small fw-bold text-muted mb-1">Tipe Bayar</label><select class="form-select" id="mTipe"><option value="Bulanan">Bulanan</option><option value="Semesteran">Semesteran</option></select></div>
+              <div class="col-6"><label class="small fw-bold text-muted mb-1">Status</label><input list="mStatusOptions" type="text" class="form-control" id="mStatus" placeholder="Ketik / pilih status..." autocomplete="off" value="Aktif"><datalist id="mStatusOptions"><option value="Aktif"><option value="Tidak Aktif"><option value="Cuti"><option value="Lulus"></datalist></div>
+              <div class="col-6"><label class="small fw-bold text-muted mb-1">Tipe Bayar</label><input list="mTipeOptions" type="text" class="form-control" id="mTipe" placeholder="Ketik / pilih..." autocomplete="off" value="Bulanan"><datalist id="mTipeOptions"><option value="Bulanan"><option value="Semesteran"></datalist></div>
             </div>
             <div class="mb-3"><label class="small fw-bold text-muted mb-1">Biaya Perbulan (Rp)</label><input type="text" class="form-control" id="mBiaya" placeholder="Contoh: 450.000" oninput="formatRibuan(this)" inputmode="numeric" required></div>
             <div class="d-flex gap-2 mt-4">
@@ -542,16 +542,14 @@
               <input type="text" class="form-control bg-light" id="gNamaKonfirmasi" readonly>
             </div>
 
-            <!-- Mata Pelajaran -->
-            <div class="mb-3">
-              <label class="small fw-bold text-muted mb-1">Mata Pelajaran</label>
-              <input list="gMapelOptions" type="text" class="form-control" id="gMapel" placeholder="Ketik / pilih mata pelajaran..." autocomplete="off" required><datalist id="gMapelOptions"></datalist>
-            </div>
+            <!-- Container untuk multiple Mata Pelajaran + Kelas groups -->
+            <div id="gMapelGroupsContainer"></div>
 
-            <!-- Kelas: checkboxes grouped by jenjang -->
-            <div class="mb-3">
-              <label class="small fw-bold text-muted mb-2 d-block">Pilih Kelas <span class="text-danger">*</span></label>
-              <div id="gKelasCheckboxContainer" class="p-3 border rounded-3 bg-light" style="max-height:220px;overflow-y:auto;"></div>
+            <!-- Tombol Tambah Mata Pelajaran (hanya untuk mode "Guru Baru") -->
+            <div id="gAddMapelGroupWrapper" class="mb-3">
+              <button type="button" class="btn btn-sm btn-outline-primary w-100 fw-bold" onclick="addMapelGroup()" style="border-radius:10px;border-style:dashed;padding:8px;">
+                <i class="fas fa-plus me-1"></i>Tambah Mata Pelajaran
+              </button>
             </div>
 
             <div class="d-flex gap-2 mt-4">

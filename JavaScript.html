@@ -590,10 +590,31 @@ function toggleLainLainInput() {
 }
 function autoFillNama() {
   let valInput = document.getElementById('pSiswaSearch').value;
-  if (!valInput || valInput.trim() === "") { document.getElementById('pNama').value = ""; return; }
+  if (!valInput || valInput.trim() === "") {
+    document.getElementById('pNama').value = "";
+    // Reset suggestion pengirim
+    let dl = document.getElementById('pPengirimOptions');
+    if (dl) dl.innerHTML = '';
+    return;
+  }
   let idSiswa = valInput.split(" - ")[0].trim();
   let match = rawSiswa.find(s => (s.id||"").toString().toUpperCase() === idSiswa.toUpperCase());
   document.getElementById('pNama').value = match ? match.nama : "";
+
+  // Populate suggestion Nama Pengirim berdasarkan riwayat pembayaran siswa ini
+  let dl = document.getElementById('pPengirimOptions');
+  if (dl && match) {
+    let pengirimSet = new Set();
+    rawPayment.forEach(p => {
+      if ((p.idSiswa||"").toString().toUpperCase() === idSiswa.toUpperCase()
+          && p.pengirim && p.pengirim.trim()) {
+        pengirimSet.add(p.pengirim.trim());
+      }
+    });
+    dl.innerHTML = [...pengirimSet].sort().map(n => `<option value="${n}">`).join('');
+  } else if (dl) {
+    dl.innerHTML = '';
+  }
 }
 function initModalBayar() { if (!bsModalBayar) bsModalBayar = new bootstrap.Modal(document.getElementById('modalBayar')); }
 function bukaModalInputBayar() { resetFormBayarKeDefault(); initModalBayar(); bsModalBayar.show(); }
@@ -926,13 +947,6 @@ function layoutDaySchedules(daySched) {
   return items;
 }
 
-// ── Konstanta layout TRANSPOSED ──
-const CAL_HOUR_W    = 100;   // px per jam (lebar kolom waktu)
-const CAL_BLOCK_H   = 38;    // tinggi blok jadwal
-const CAL_BLOCK_GAP = 3;     // gap antar block stacked
-const CAL_GUTTER_W  = 110;   // lebar gutter kiri (label hari)
-const CAL_MIN_ROW_H = 60;    // tinggi minimum row hari
-
 function renderCalendar() {
   populateCalFilters();
 
@@ -956,7 +970,6 @@ function renderCalendar() {
     return true;
   });
 
-  // Info filter
   let infoEl = document.getElementById('calFilterInfo');
   if (infoEl) {
     let totalAll = rawSchedule.length;
@@ -968,120 +981,105 @@ function renderCalendar() {
     }
   }
 
-  let dayNames = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
-  let totalHours = CAL_END_HOUR - CAL_START_HOUR + 1;
-  let bodyW = totalHours * CAL_HOUR_W;
-  let totalW = CAL_GUTTER_W + bodyW;
+  let dayNames = ['Sen','Sel','Rab','Kam','Jum','Sab','Min'];
+  let colW = 130, gut = 56;
+  let totalH = (CAL_END_HOUR - CAL_START_HOUR + 1) * CAL_HOUR_PX + 40;
 
-  let html = `<div style="min-width:${totalW}px;font-family:inherit;">`;
+  let html = `<div style="display:flex;flex-direction:column;min-width:${gut+7*colW}px;font-family:inherit;">`;
 
-  // ── HEADER: kolom waktu (sticky top) ──
+  // Header: 7 hari (sticky top)
   html += `<div style="display:flex;position:sticky;top:0;z-index:20;background:#fff;border-bottom:2px solid #cbd5e1;box-shadow:0 2px 8px rgba(0,0,0,0.06);">`;
-  html += `<div style="width:${CAL_GUTTER_W}px;flex-shrink:0;background:#f8fafc;border-right:2px solid #cbd5e1;"></div>`;
-  html += `<div style="flex:1;display:flex;">`;
-  for (let h = CAL_START_HOUR; h <= CAL_END_HOUR; h++) {
-    html += `<div style="width:${CAL_HOUR_W}px;flex-shrink:0;text-align:center;padding:10px 4px;border-left:1px solid #e2e8f0;font-weight:700;font-size:13px;color:#3c4043;background:#f8fafc;">${String(h).padStart(2,'0')}:00</div>`;
-  }
-  html += `</div></div>`;
-
-  // ── BODY: 7 baris hari ──
-  weekDates.forEach((date, dayIdx) => {
+  html += `<div style="width:${gut}px;flex-shrink:0;background:#f8fafc;border-right:1px solid #e2e8f0;"></div>`;
+  weekDates.forEach((date,i) => {
     let ds = toLocalDateStr(date);
     let isToday = ds === today;
-    let daySched = filtered.filter(s => s.tgl && s.tgl.split('T')[0] === ds);
-    let dayLaid = layoutDaySchedules(daySched);
-
-    let maxCols = dayLaid.length > 0 ? Math.max(1, ...dayLaid.map(s => s._maxCols)) : 1;
-    let rowH = Math.max(CAL_MIN_ROW_H, maxCols * (CAL_BLOCK_H + CAL_BLOCK_GAP) + 8);
-
-    html += `<div style="display:flex;border-bottom:2px solid #cbd5e1;">`;
-
-    // Day label (sticky left)
-    html += `<div style="width:${CAL_GUTTER_W}px;flex-shrink:0;padding:6px 4px;background:${isToday?'#f0f4ff':'#f8fafc'};border-right:2px solid #cbd5e1;position:sticky;left:0;z-index:10;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
-      <div style="font-size:11px;font-weight:700;color:#70757a;text-transform:uppercase;letter-spacing:0.6px;">${dayNames[dayIdx]}</div>
-      <div style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-top:4px;font-size:18px;font-weight:500;background:${isToday?'#1a73e8':'transparent'};color:${isToday?'#fff':'#3c4043'};">${date.getDate()}</div>
-      <div style="font-size:9px;color:#70757a;margin-top:2px;">${date.toLocaleDateString('id-ID',{month:'short'})}</div>
+    html += `<div style="flex:1;min-width:${colW}px;text-align:center;padding:8px 4px 6px;border-left:1px solid #e2e8f0;background:${isToday?'#f0f4ff':'#f8fafc'};">
+      <div style="font-size:10px;font-weight:700;color:#70757a;text-transform:uppercase;letter-spacing:0.8px;">${dayNames[i]}</div>
+      <div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:3px auto 0;font-size:20px;font-weight:400;background:${isToday?'#1a73e8':'transparent'};color:${isToday?'#fff':'#3c4043'};">${date.getDate()}</div>
     </div>`;
+  });
+  html += `</div>`;
 
-    // Day content area
-    html += `<div style="flex:1;position:relative;height:${rowH}px;background:${isToday?'#fafbff':'#fff'};">`;
+  html += `<div style="display:flex;position:relative;">`;
 
-    // Vertical grid lines + click slots
+  // Time gutter (kiri, sticky)
+  html += `<div style="width:${gut}px;flex-shrink:0;position:sticky;left:0;z-index:10;background:#fff;border-right:1px solid #e2e8f0;">`;
+  for (let h = CAL_START_HOUR; h <= CAL_END_HOUR; h++)
+    html += `<div style="height:${CAL_HOUR_PX}px;display:flex;align-items:flex-start;justify-content:flex-end;padding:4px 8px 0 0;font-size:11px;font-weight:600;color:#70757a;border-top:2px solid #cbd5e1;">${String(h).padStart(2,'0')}:00</div>`;
+  html += `<div style="height:40px;"></div></div>`;
+
+  // 7 kolom hari
+  weekDates.forEach((date, dayIdx) => {
+    let ds      = toLocalDateStr(date);
+    let isToday = ds === today;
+    let daySched = filtered.filter(s => s.tgl && s.tgl.split('T')[0] === ds);
+
+    html += `<div style="flex:1;min-width:${colW}px;position:relative;border-left:1px solid #e2e8f0;height:${totalH}px;background:${isToday?'#fafbff':'#fff'};">`;
+
+    // Slot klik (z-index 1, di bawah block)
     for (let h = CAL_START_HOUR; h <= CAL_END_HOUR; h++) {
-      let x = (h - CAL_START_HOUR) * CAL_HOUR_W;
-      let hh = String(h).padStart(2,'0');
-      // Garis vertikal full hour (tebal)
-      html += `<div style="position:absolute;left:${x}px;top:0;bottom:0;width:0;border-left:2px solid #cbd5e1;pointer-events:none;z-index:0;"></div>`;
-      // Garis vertikal half hour (dashed)
-      html += `<div style="position:absolute;left:${x+CAL_HOUR_W/2}px;top:0;bottom:0;width:0;border-left:1px dashed #e2e8f0;pointer-events:none;z-index:0;"></div>`;
-      // Click slot full hour
-      html += `<div style="position:absolute;left:${x}px;top:0;bottom:0;width:${CAL_HOUR_W/2}px;cursor:pointer;transition:background .1s;z-index:1;" onmouseover="this.style.background='rgba(26,115,232,0.06)'" onmouseout="this.style.background=''" onclick="onCalSlotClick(event,'${ds}',${h},0)" title="${hh}:00"></div>`;
-      // Click slot half hour
-      html += `<div style="position:absolute;left:${x+CAL_HOUR_W/2}px;top:0;bottom:0;width:${CAL_HOUR_W/2}px;cursor:pointer;transition:background .1s;z-index:1;" onmouseover="this.style.background='rgba(26,115,232,0.06)'" onmouseout="this.style.background=''" onclick="onCalSlotClick(event,'${ds}',${h},30)" title="${hh}:30"></div>`;
+      let top = (h - CAL_START_HOUR) * CAL_HOUR_PX;
+      let hh  = String(h).padStart(2,'0');
+      html += `<div style="position:absolute;top:${top}px;left:0;right:0;height:${CAL_HOUR_PX/2}px;border-top:2px solid #cbd5e1;cursor:pointer;transition:background .1s;z-index:1;" onmouseover="this.style.background='rgba(26,115,232,0.06)'" onmouseout="this.style.background=''" onclick="onCalSlotClick(event,'${ds}',${h},0)" title="${hh}:00"></div>`;
+      html += `<div style="position:absolute;top:${top+CAL_HOUR_PX/2}px;left:0;right:0;height:${CAL_HOUR_PX/2}px;border-top:1px dashed #e2e8f0;cursor:pointer;transition:background .1s;z-index:1;" onmouseover="this.style.background='rgba(26,115,232,0.06)'" onmouseout="this.style.background=''" onclick="onCalSlotClick(event,'${ds}',${h},30)" title="${hh}:30"></div>`;
     }
 
-    // ── BLOK JADWAL (horizontal, stack vertikal kalau overlap) ──
+    // BLOK JADWAL dengan layout overlap side-by-side
+    let dayLaid = layoutDaySchedules(daySched);
     dayLaid.forEach(s => {
-      let t1 = parseJamRobust(s.jamMulai);
-      let t2 = parseJamRobust(s.jamBerakhir);
-      if (!t1 || !t2) return;
-      let startMin = (t1.h - CAL_START_HOUR)*60 + t1.m;
-      let endMin   = (t2.h - CAL_START_HOUR)*60 + t2.m;
-      if (endMin <= 0 || startMin >= totalHours*60) return;
-
-      let posX    = startMin/60 * CAL_HOUR_W;
-      let widthPx = Math.max((endMin-startMin)/60 * CAL_HOUR_W, 50);
-      let posY    = (s._col || 0) * (CAL_BLOCK_H + CAL_BLOCK_GAP) + 4;
-      let c       = getRoomColor(s.ruangan);
-
-      // Visibility tiered berdasarkan LEBAR block
-      let showSub  = widthPx > 80;
-      let showGuru = widthPx > 110;
-      let showTime = widthPx > 140;
+      let pos = getCalBlockPos(s.jamMulai, s.jamBerakhir); if (!pos) return;
+      let c   = getRoomColor(s.ruangan);
+      let availWidth = 88;
+      let blockW = availWidth / s._maxCols;
+      let blockL = (s._col || 0) * blockW;
+      let showSub  = pos.h > 30;
+      let showGuru = pos.h > 46;
+      let showTime = pos.h > 62;
 
       html += `<div
-        style="position:absolute;left:${posX+2}px;width:${widthPx-4}px;top:${posY}px;height:${CAL_BLOCK_H}px;
+        style="position:absolute;top:${pos.t+2}px;height:${Math.max(pos.h-4,16)}px;
+               left:calc(${blockL}% + 2px);width:calc(${blockW}% - 4px);
                background:${c.bg};border-left:3px solid ${c.border};border-radius:4px;
-               padding:3px 6px;cursor:pointer;overflow:hidden;z-index:5;
-               box-shadow:0 1px 3px rgba(0,0,0,0.1);transition:filter .15s;display:flex;flex-direction:column;justify-content:center;"
+               padding:3px 5px;cursor:pointer;overflow:hidden;z-index:5;
+               box-shadow:0 1px 3px rgba(0,0,0,0.1);transition:filter .15s;"
         onmouseover="this.style.filter='brightness(.95)'"
         onmouseout="this.style.filter=''"
         onclick="event.stopPropagation();onCalBlockClick(${s.rowIndex})"
         title="${s.mapel} \u00b7 ${s.kelas}&#10;Ruangan: ${s.ruangan}&#10;Guru: ${s.namaGuru}&#10;${s.jamMulai}\u2013${s.jamBerakhir}">
-        <div style="font-size:11px;font-weight:700;color:${c.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">${s.mapel}${showSub ? ` <span style="font-weight:400;opacity:.85;">\u00b7 ${s.kelas}</span>` : ''}</div>
-        ${showGuru ? `<div style="font-size:9px;color:${c.text};opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;"><i class="fas fa-user-tie me-1" style="font-size:8px;"></i>${s.namaGuru||'-'} \u00b7 ${s.ruangan}</div>` : ''}
-        ${showTime ? `<div style="font-size:9px;color:${c.text};opacity:.75;line-height:1.2;">${s.jamMulai}\u2013${s.jamBerakhir}</div>` : ''}
+        <div style="font-size:11px;font-weight:700;color:${c.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;">${s.mapel}</div>
+        ${showSub  ? `<div style="font-size:9px;color:${c.text};opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;">${s.ruangan} \u00b7 ${s.kelas}</div>` : ''}
+        ${showGuru ? `<div style="font-size:9px;color:${c.text};opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;"><i class="fas fa-user-tie me-1" style="font-size:8px;"></i>${s.namaGuru||'-'}</div>` : ''}
+        ${showTime ? `<div style="font-size:9px;color:${c.text};opacity:.7;line-height:1.3;">${s.jamMulai}\u2013${s.jamBerakhir}</div>` : ''}
       </div>`;
     });
 
-    // Garis waktu sekarang (vertical) — hanya di row hari ini
+    // Garis waktu sekarang (HORIZONTAL — vertikal layout)
     if (isToday) {
-      let nm = (now.getHours() - CAL_START_HOUR) * 60 + now.getMinutes();
+      let nm = (now.getHours()-CAL_START_HOUR)*60+now.getMinutes();
       if (nm >= 0 && now.getHours() <= CAL_END_HOUR) {
-        let nx = nm/60 * CAL_HOUR_W;
-        html += `<div style="position:absolute;left:${nx}px;top:0;bottom:0;width:2px;background:#ea4335;z-index:15;pointer-events:none;">
-                   <div style="position:absolute;top:-5px;left:-4px;width:10px;height:10px;background:#ea4335;border-radius:50%;"></div>
+        let nt = nm/60*CAL_HOUR_PX;
+        html += `<div style="position:absolute;top:${nt}px;left:0;right:0;height:2px;background:#ea4335;z-index:15;pointer-events:none;">
+                   <div style="position:absolute;left:-5px;top:-4px;width:10px;height:10px;background:#ea4335;border-radius:50%;"></div>
                  </div>`;
       }
     }
-
-    html += `</div>`;  // close day content
-    html += `</div>`;  // close day row
+    html += `</div>`;
   });
 
-  html += `</div>`;
+  html += `</div></div>`;
   document.getElementById('calendarGrid').innerHTML = html;
 
-  // Auto-scroll HORIZONTAL ke jam sekarang (kalau hari ini ada di minggu yg ditampilkan)
+  // Auto-scroll VERTIKAL ke jam sekarang
   let g = document.getElementById('calendarGrid');
   let inWeek = weekDates.some(d => toLocalDateStr(d) === today);
   setTimeout(() => {
-    g.scrollLeft = (inWeek && now.getHours() >= CAL_START_HOUR)
-      ? Math.max(0, (now.getHours() - CAL_START_HOUR - 1) * CAL_HOUR_W)
+    g.scrollTop = (inWeek && now.getHours() >= CAL_START_HOUR)
+      ? Math.max(0, (now.getHours()-CAL_START_HOUR-1)*CAL_HOUR_PX)
       : 0;
-    g.scrollTop = 0;
+    g.scrollLeft = 0;
   }, 50);
 }
+
 
 
 
@@ -1105,25 +1103,26 @@ function onCalSlotClick(event, dateStr, hour, minute) {
 
 function showPreviewBlock(slotEl, h1, m1, h2, m2) {
   document.querySelectorAll('.cal-preview-block').forEach(el => el.remove());
-  let dayEl = slotEl.parentElement;  // day content area
-  if (!dayEl) return;
+  let colEl = slotEl.parentElement;  // day column
+  if (!colEl) return;
 
   let startMin = (h1 - CAL_START_HOUR) * 60 + m1;
   let endMin   = (h2 - CAL_START_HOUR) * 60 + m2;
-  let left  = startMin / 60 * CAL_HOUR_W;
-  let width = Math.max((endMin - startMin) / 60 * CAL_HOUR_W, 60);
+  let top    = startMin/60*CAL_HOUR_PX;
+  let height = Math.max((endMin-startMin)/60*CAL_HOUR_PX, 28);
 
   let block = document.createElement('div');
   block.className = 'cal-preview-block';
-  // Style mirip Google Calendar: solid purple/blue block (looks like a saved event)
-  block.style.cssText = `position:absolute;left:${left+2}px;width:${width-4}px;top:4px;height:${CAL_BLOCK_H}px;
+  // Style mirip Google Calendar: solid purple block (looks like saved event)
+  block.style.cssText = `position:absolute;top:${top+2}px;height:${height-4}px;left:calc(2px);right:calc(12% + 2px);
     background:#7986cb;border-radius:4px;padding:4px 8px;
     z-index:12;pointer-events:none;display:flex;flex-direction:column;justify-content:center;
     box-shadow:0 2px 6px rgba(0,0,0,0.15);`;
   block.innerHTML = `<div style="font-size:11px;font-weight:600;color:#fff;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">(Jadwal Baru)</div>
     <div style="font-size:10px;color:#fff;opacity:.95;line-height:1.2;">${String(h1).padStart(2,'0')}:${String(m1).padStart(2,'0')} \u2013 ${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}</div>`;
-  dayEl.appendChild(block);
+  colEl.appendChild(block);
 }
+
 
 
 function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
@@ -1191,8 +1190,7 @@ function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
   until.setMonth(until.getMonth() + 1);
   document.getElementById('qpUntilDate').value = toLocalDateStr(until);
 
-  // ── Posisi popup: BELOW day row supaya tidak menutupi preview block (yang extend horizontal ke kanan) ──
-  // Reset dulu style
+  // ── Posisi popup di KANAN klik (vertical layout — preview block extend ke bawah, jadi popup di kanan tidak overlap) ──
   popup.style.maxHeight  = '';
   popup.style.overflowY  = 'visible';
   popup.style.visibility = 'hidden';
@@ -1204,31 +1202,21 @@ function showQuickPopup(event, dateStr, jamMulai, jamBerakhir) {
   let popupW = popup.offsetWidth || 330;
 
   let rect = event.target.getBoundingClientRect();
-  // Position popup di BAWAH klik (rect.bottom = bottom of day row content area)
-  // supaya preview block yang extend horizontal di samping/dalam row tetap terlihat
-  let x = rect.left;
-  let y = rect.bottom + 8;
-
-  // Adjust X kalau popup overflow kanan layar
-  if (x + popupW > window.innerWidth - 10) x = window.innerWidth - popupW - 10;
+  // Posisi X: prefer kanan klik, fallback kiri
+  let x = rect.right + 10;
+  if (x + popupW > window.innerWidth - 10) x = rect.left - popupW - 10;
   if (x < 10) x = 10;
 
-  // Kalau popup tidak muat ke bawah → coba ke atas day row
+  // Posisi Y: anchor TOP supaya ada ruang ke bawah untuk growth (saat recurring di-on)
+  let y = rect.top;
   if (y + ESTIMATED_MAX_H > window.innerHeight - 10) {
-    let above = rect.top - ESTIMATED_MAX_H - 8;
-    if (above >= 10) {
-      y = above;
-    } else {
-      // Tidak muat atas/bawah → anchor ke top viewport, popup akan scroll internal
-      y = 10;
-    }
+    y = Math.max(10, window.innerHeight - ESTIMATED_MAX_H - 10);
   }
   if (y < 10) y = 10;
 
   popup.style.left = x + 'px';
   popup.style.top  = y + 'px';
 
-  // Set max-height sesuai sisa ruang dari top popup ke bawah viewport
   let availH = window.innerHeight - y - 10;
   popup.style.maxHeight = availH + 'px';
   popup.style.overflowY = 'auto';
@@ -1952,9 +1940,10 @@ function siapkanEditGuru(rowIndex) {
   document.getElementById('gNamaBaruWrapper').classList.remove('d-none');
   document.getElementById('gNamaBaru').value = g.nama;
   document.getElementById('gRowIndexHidden').value = g.rowIndex;
-  setSelectValueSafe('gMapel', g.mapel);
+  // Single group dengan data existing — tombol "Tambah Mata Pelajaran" disembunyikan (edit baris spesifik)
   let checkedArr = g.kelas.split(',').map(k => k.trim()).filter(k => k);
-  generateKelasCheckboxesGuru(checkedArr);
+  generateGuruMapelGroups([{ mapel: g.mapel, kelasArr: checkedArr }]);
+  document.getElementById('gAddMapelGroupWrapper').classList.add('d-none');
   document.getElementById('txtJudulFormGuru').innerText = 'Edit Mapel Guru (' + g.id + ')';
   document.getElementById('btnSimpanGuru').innerText = 'Update Data';
   document.getElementById('btnSimpanGuru').className = 'btn btn-warning w-100 fw-bold py-2';
@@ -1973,24 +1962,39 @@ function resetFormGuruKeDefault() {
   document.getElementById('txtJudulFormGuru').innerText = 'Tambah Data Guru';
   document.getElementById('btnSimpanGuru').innerText = 'Simpan';
   document.getElementById('btnSimpanGuru').className = 'btn btn-primary w-100 fw-bold py-2';
-  generateKelasCheckboxesGuru([]);
+  // Reset ke 1 group kosong, tampilkan tombol "Tambah Mata Pelajaran"
+  generateGuruMapelGroups([{ mapel: '', kelasArr: [] }]);
+  document.getElementById('gAddMapelGroupWrapper').classList.remove('d-none');
 }
 function submitGuru() {
   let rowIndex = document.getElementById('gRowIndexHidden').value;
-  let mapel = document.getElementById('gMapel').value.trim();
-  let kelasArr = [];
-  document.querySelectorAll('.chk-guru-kelas:checked').forEach(cb => kelasArr.push(cb.value));
-  if (!mapel) { tampilkanToast('Mata pelajaran wajib diisi!', 'warning'); return; }
-  if (kelasArr.length === 0) { tampilkanToast('Pilih minimal satu kelas!', 'warning'); return; }
-  if (!isValidComboValue('gMapel')) { tampilkanToast('\u26a0\ufe0f Mata Pelajaran tidak valid! Pilih dari daftar suggestion.','warning'); return; }
-  let payload = { rowIndex: rowIndex, mapel: mapel, kelasArr: kelasArr };
+  let groups   = getMapelGroupsData();
+
+  // Validate groups
+  if (groups.length === 0) { tampilkanToast('Tambahkan minimal 1 mata pelajaran!', 'warning'); return; }
+  for (let i = 0; i < groups.length; i++) {
+    let g = groups[i];
+    if (!g.mapel)                 { tampilkanToast('Mata Pelajaran #' + (i+1) + ' kosong!', 'warning'); return; }
+    if (g.kelasArr.length === 0)  { tampilkanToast('Pilih minimal 1 kelas untuk Mata Pelajaran #' + (i+1) + '!', 'warning'); return; }
+    if (!isMapelInDatalist(g.mapel)) { tampilkanToast('\u26a0\ufe0f "' + g.mapel + '" bukan mata pelajaran valid! Pilih dari suggestion.', 'warning'); return; }
+  }
+
+  let payload;
   if (rowIndex) {
-    payload.namaBaru = document.getElementById('gNamaBaru').value.trim();
+    // Edit mode — single group
+    payload = {
+      rowIndex : rowIndex,
+      namaBaru : document.getElementById('gNamaBaru').value.trim(),
+      mapel    : groups[0].mapel,
+      kelasArr : groups[0].kelasArr
+    };
   } else {
+    // New / Existing mode — multi-group payload
     let mode = document.querySelector('input[name="gMode"]:checked').value;
+    payload = { mapelGroups: groups };
     if (mode === 'new') {
       payload.namaBaru = document.getElementById('gNamaBaru').value.trim();
-      payload.idGuru = '';
+      payload.idGuru   = '';
       if (!payload.namaBaru) { tampilkanToast('Nama guru wajib diisi!', 'warning'); return; }
     } else {
       if (!isValidComboValue('gGuruSearch')) { tampilkanToast('\u26a0\ufe0f Guru tidak valid! Pilih dari daftar suggestion.','warning'); return; }
@@ -1998,6 +2002,7 @@ function submitGuru() {
       if (!payload.idGuru) { tampilkanToast('Pilih guru yang sudah ada!', 'warning'); return; }
     }
   }
+
   setTombolLoading('btnSimpanGuru', true, 'Menyimpan...');
   tampilkanLoading('Menyimpan data guru...');
   google.script.run
@@ -2014,6 +2019,103 @@ function submitGuru() {
       tampilkanToast('\u274c Error: ' + err.message, 'error');
     })
     .simpanGuru(payload);
+}
+
+// Helper: cek mapel ada di datalist gMapelOptions (validation per group)
+function isMapelInDatalist(val) {
+  if (!val) return false;
+  let dl = document.getElementById('gMapelOptions');
+  if (!dl) return true;  // datalist tidak ada → skip
+  let opts = dl.querySelectorAll('option');
+  for (let opt of opts) {
+    if (opt.value.toLowerCase() === val.toLowerCase()) return true;
+  }
+  return false;
+}
+
+// ── MULTI-GROUP MAPEL helpers ──
+let _gGroupCounter = 0;
+
+// Generate satu group HTML
+function generateMapelGroupHTML(idx, mapel, checkedArr) {
+  mapel = mapel || '';
+  checkedArr = checkedArr || [];
+  let showRemove = (idx > 0);
+  return `<div class="mapel-group mb-3 p-3 rounded-3" data-idx="${idx}" style="background:#f8fafc;border:1px solid #e2e8f0;">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span class="small fw-bold" style="color:#3b82f6;letter-spacing:0.3px;"><i class="fas fa-book me-1"></i>Mata Pelajaran ${idx + 1}</span>
+      ${showRemove ? `<button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeMapelGroup(${idx})" style="font-size:11px;text-decoration:none;"><i class="fas fa-times me-1"></i>Hapus</button>` : ''}
+    </div>
+    <div class="mb-2">
+      <input list="gMapelOptions" type="text" class="form-control gMapelInput" data-idx="${idx}" placeholder="Ketik / pilih mata pelajaran..." autocomplete="off" value="${mapel}">
+    </div>
+    <label class="small fw-bold text-muted mb-2 d-block">Pilih Kelas <span class="text-danger">*</span></label>
+    <div id="gKelasContainer-${idx}" class="p-2 border rounded-3 bg-white" style="max-height:180px;overflow-y:auto;"></div>
+  </div>`;
+}
+
+// Initialize/populate semua groups
+function generateGuruMapelGroups(groupsData) {
+  groupsData = (groupsData && groupsData.length > 0) ? groupsData : [{ mapel: '', kelasArr: [] }];
+  let html = '';
+  groupsData.forEach((g, idx) => { html += generateMapelGroupHTML(idx, g.mapel, g.kelasArr); });
+  document.getElementById('gMapelGroupsContainer').innerHTML = html;
+  _gGroupCounter = groupsData.length - 1;
+  groupsData.forEach((g, idx) => generateKelasPillsForGroup(g.kelasArr, idx));
+}
+
+// Generate kelas pill toggles untuk container spesifik group
+function generateKelasPillsForGroup(checkedArr, groupIdx) {
+  let container = document.getElementById('gKelasContainer-' + groupIdx);
+  if (!container) return;
+  checkedArr = checkedArr || [];
+  let html = '';
+  jenjangSistem.forEach(jenjang => {
+    html += `<div class="mb-2">
+      <span class="small fw-bold text-uppercase" style="color:#64748b;letter-spacing:0.8px;font-size:10px;">${jenjang.nama}</span>
+      <div class="d-flex flex-wrap gap-1 mt-1">`;
+    jenjang.daftar.forEach(kelas => {
+      let id = `gChk-${groupIdx}-` + kelas.replace(/\s/g, '-');
+      let on = checkedArr.includes(kelas);
+      html += `
+        <input type="checkbox" class="chk-guru-kelas" data-group="${groupIdx}" value="${kelas}" id="${id}" ${on?'checked':''} style="position:absolute;left:-9999px;">
+        <span class="kelas-pill" data-target="${id}" onclick="toggleKelasPill(this)" data-on="${on}"
+              style="display:inline-block;padding:4px 10px;border-radius:16px;cursor:pointer;
+                     background:${on?'#3b82f6':'#f8fafc'};color:${on?'#fff':'#475569'};
+                     border:1px solid ${on?'#3b82f6':'#cbd5e1'};font-size:11px;
+                     font-weight:600;transition:all .15s;user-select:none;">${kelas}</span>`;
+    });
+    html += `</div></div>`;
+  });
+  container.innerHTML = html;
+}
+
+// Tombol "+ Tambah Mata Pelajaran"
+function addMapelGroup() {
+  _gGroupCounter++;
+  let idx = _gGroupCounter;
+  document.getElementById('gMapelGroupsContainer').insertAdjacentHTML('beforeend', generateMapelGroupHTML(idx, '', []));
+  generateKelasPillsForGroup([], idx);
+}
+
+// Tombol "× Hapus" pada group
+function removeMapelGroup(idx) {
+  let el = document.querySelector(`#gMapelGroupsContainer .mapel-group[data-idx="${idx}"]`);
+  if (el) el.remove();
+}
+
+// Collect data dari semua groups
+function getMapelGroupsData() {
+  let groups = [];
+  document.querySelectorAll('#gMapelGroupsContainer .mapel-group').forEach(groupEl => {
+    let idx = parseInt(groupEl.dataset.idx);
+    let mapelInput = groupEl.querySelector('.gMapelInput');
+    let mapel = mapelInput ? mapelInput.value.trim() : '';
+    let kelasArr = [];
+    document.querySelectorAll(`#gKelasContainer-${idx} .chk-guru-kelas:checked`).forEach(cb => kelasArr.push(cb.value));
+    groups.push({ mapel, kelasArr });
+  });
+  return groups;
 }
 function konfirmasiHapusGuru(rowIndex, label) {
   if (!confirm('Hapus data guru "' + label + '"?\n(Hanya baris mapel ini yang dihapus)')) return;
@@ -2346,26 +2448,8 @@ function populateKelasSelect(elId) {
 
 // Generate kelas checkboxes untuk form guru
 function generateKelasCheckboxesGuru(checkedArr) {
-  checkedArr = checkedArr || [];
-  let html = '';
-  jenjangSistem.forEach(jenjang => {
-    html += `<div class="mb-3">
-      <span class="small fw-bold text-uppercase" style="color:#64748b;letter-spacing:1px;">${jenjang.nama}</span>
-      <div class="d-flex flex-wrap gap-2 mt-2">`;
-    jenjang.daftar.forEach(kelas => {
-      let id = 'gChk-' + kelas.replace(/\s/g, '-');
-      let on = checkedArr.includes(kelas);
-      html += `
-        <input type="checkbox" class="chk-guru-kelas" value="${kelas}" id="${id}" ${on?'checked':''} style="position:absolute;left:-9999px;">
-        <span class="kelas-pill" data-target="${id}" onclick="toggleKelasPill(this)" data-on="${on}"
-              style="display:inline-block;padding:6px 14px;border-radius:20px;cursor:pointer;
-                     background:${on?'#3b82f6':'#f8fafc'};color:${on?'#fff':'#475569'};
-                     border:1.5px solid ${on?'#3b82f6':'#cbd5e1'};font-size:12px;
-                     font-weight:600;transition:all .15s;user-select:none;">${kelas}</span>`;
-    });
-    html += `</div></div>`;
-  });
-  document.getElementById('gKelasCheckboxContainer').innerHTML = html;
+  // DEPRECATED: dipakai oleh kode lama; sekarang pakai generateGuruMapelGroups untuk multi-mapel
+  generateGuruMapelGroups([{ mapel: '', kelasArr: checkedArr || [] }]);
 }
 
 // Handler universal untuk semua pill toggle: ambil checkbox dari data-target, flip, sync visual
