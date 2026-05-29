@@ -7,5 +7,7 @@ const CONFIG = {
   SHEET_GURU    : "Master Data Guru",
   SHEET_SCHEDULE: "Data Schedule",
   SHEET_MAPEL   : "Data Mata Pelajaran",
-  SHEET_RUANGAN : "Data Ruangan"
+  SHEET_RUANGAN : "Data Ruangan",
+  SHEET_KELAS   : "Data Kelas",
+  SHEET_ABSENSI : "Data Absensi"
 };

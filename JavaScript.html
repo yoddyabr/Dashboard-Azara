@@ -23,11 +23,69 @@ let scheduleDataLoaded = false;
 let currentPageSiswa = 1; let filteredSiswaData = [];
 let currentPagePembayaran = 1; let filteredPembayaranData = [];
 
-const jenjangSistem = [
+// jenjangSistem sekarang DINAMIS — di-build dari sheet "Data Kelas" saat master data load.
+// Default fallback (dipakai sebelum data ke-load):
+let jenjangSistem = [
   { nama: "SD",  daftar: ["SD 1","SD 2","SD 3","SD 4","SD 5","SD 6"] },
   { nama: "SMP", daftar: ["SMP 7","SMP 8","SMP 9"] },
   { nama: "SMA", daftar: ["SMA 10","SMA 11","SMA 12"] }
 ];
+let rombelToTingkat = {};   // { "10A": "10", "10B": "10", ... }
+let tingkatList     = [];   // ["1","2",...,"12"] — untuk dropdown di Data Mata Pelajaran
+let rawKelas        = [];   // { rowIndex, jenjang, tingkat, rombel }
+
+// Build jenjangSistem + rombelToTingkat + tingkatList dari kelasList
+function buildKelasStructures(kelasList) {
+  if (!kelasList || kelasList.length === 0) return;  // pakai default kalau kosong
+  rawKelas = kelasList;
+  rombelToTingkat = {};
+  let jenjangMap = {}, jenjangOrder = [], tingkatSet = new Set();
+  kelasList.forEach(k => {
+    rombelToTingkat[k.rombel.toLowerCase()] = k.tingkat;
+    if (k.tingkat) tingkatSet.add(k.tingkat);
+    if (!jenjangMap[k.jenjang]) { jenjangMap[k.jenjang] = []; jenjangOrder.push(k.jenjang); }
+    jenjangMap[k.jenjang].push(k.rombel);
+  });
+  jenjangSistem = jenjangOrder.map(j => ({ nama: j, daftar: jenjangMap[j] }));
+  tingkatList = [...tingkatSet].sort((a,b) => {
+    let na = parseInt(a), nb = parseInt(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+}
+
+// Populate datalist/select dengan daftar TINGKAT (untuk Data Mata Pelajaran)
+function populateTingkatSelect(elId) {
+  let el = document.getElementById(elId);
+  if (!el) return;
+  let list = (tingkatList && tingkatList.length > 0) ? tingkatList : ['1','2','3','4','5','6','7','8','9','10','11','12'];
+  if (el.tagName === 'INPUT' && el.getAttribute('list')) {
+    let dl = document.getElementById(el.getAttribute('list'));
+    if (dl) dl.innerHTML = list.map(t => `<option value="${t}">`).join('');
+    return;
+  }
+  el.innerHTML = '<option value="">-- Pilih Tingkat --</option>' + list.map(t => `<option value="${t}">${t}</option>`).join('');
+}
+
+// Helper: rombel → tingkat (fallback ke rombel itu sendiri)
+function getTingkatFromRombel(rombel) {
+  if (!rombel) return '';
+  return rombelToTingkat[rombel.toLowerCase()] || rombel;
+}
+
+// Update info "Tingkat: X · Jenjang: Y" di bawah field rombel di form Siswa
+function updateInfoTingkatSiswa() {
+  let el = document.getElementById('mInfoTingkat');
+  if (!el) return;
+  let rombel = document.getElementById('mKelas').value.trim();
+  if (!rombel) { el.innerHTML = ''; return; }
+  let k = rawKelas.find(x => x.rombel.toLowerCase() === rombel.toLowerCase());
+  if (k) {
+    el.innerHTML = '<i class="fas fa-info-circle me-1 text-success"></i>Tingkat: <strong>' + k.tingkat + '</strong> \u00b7 Jenjang: <strong>' + k.jenjang + '</strong>';
+  } else {
+    el.innerHTML = '<i class="fas fa-exclamation-triangle me-1 text-warning"></i><span class="text-warning">Rombel "' + rombel + '" belum terdaftar di Data Kelas</span>';
+  }
+}
 const mapBulanIndo = {
   "januari":0,"februari":1,"maret":2,"april":3,"mei":4,"juni":5,
   "juli":6,"agustus":7,"september":8,"oktober":9,"november":10,"desember":11
@@ -138,11 +196,14 @@ function switchView(viewName) {
       renderCalendar();
     }
   }
-  if ((viewName === 'data-mapel' || viewName === 'data-ruangan') && !masterDataLoaded) {
-    fetchMasterData();
+  if ((viewName === 'data-mapel' || viewName === 'data-ruangan' || viewName === 'data-kelas') && !masterDataLoaded) {
+    fetchMasterData(function() {
+      if (viewName === 'data-kelas') renderTabelKelas();
+    });
   }
   if (viewName === 'data-mapel' && masterDataLoaded) { applyFiltersMapel(); }
   if (viewName === 'data-ruangan' && masterDataLoaded) { renderTabelRuanganMaster(); }
+  if (viewName === 'data-kelas' && masterDataLoaded) { renderTabelKelas(); }
 }
 function switchViewMobile(viewName) {
   switchView(viewName);
@@ -373,11 +434,13 @@ function siapkanEditSiswa(idSiswa) {
   document.getElementById('txtJudulFormSiswa').innerText = "Edit Data Siswa (" + s.id + ")";
   document.getElementById('btnSimpanSiswa').innerText = "Update Data Siswa";
   document.getElementById('btnSimpanSiswa').className = "btn btn-warning w-100 fw-bold py-2";
+  updateInfoTingkatSiswa();
   initModalSiswa(); bsModalSiswa.show();
 }
 function resetFormSiswaKeDefault() {
   document.getElementById('formSiswa').reset();
   document.getElementById('mIdHidden').value = "";
+  let infoEl = document.getElementById('mInfoTingkat'); if (infoEl) infoEl.innerHTML = '';
   document.getElementById('txtJudulFormSiswa').innerText = "Pendaftaran Siswa Baru";
   document.getElementById('btnSimpanSiswa').innerText = "Simpan Data";
   document.getElementById('btnSimpanSiswa').className = "btn btn-primary w-100 fw-bold py-2";
@@ -994,7 +1057,7 @@ function renderCalendar() {
   weekDates.forEach((date,i) => {
     let ds = toLocalDateStr(date);
     let isToday = ds === today;
-    html += `<div style="flex:1;min-width:${colW}px;text-align:center;padding:8px 4px 6px;border-left:1px solid #e2e8f0;background:${isToday?'#f0f4ff':'#f8fafc'};">
+    html += `<div style="flex:1;min-width:${colW}px;text-align:center;padding:8px 4px 6px;border-left:2px solid #cbd5e1;background:${isToday?'#f0f4ff':'#f8fafc'};">
       <div style="font-size:10px;font-weight:700;color:#70757a;text-transform:uppercase;letter-spacing:0.8px;">${dayNames[i]}</div>
       <div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:3px auto 0;font-size:20px;font-weight:400;background:${isToday?'#1a73e8':'transparent'};color:${isToday?'#fff':'#3c4043'};">${date.getDate()}</div>
     </div>`;
@@ -1015,7 +1078,7 @@ function renderCalendar() {
     let isToday = ds === today;
     let daySched = filtered.filter(s => s.tgl && s.tgl.split('T')[0] === ds);
 
-    html += `<div style="flex:1;min-width:${colW}px;position:relative;border-left:1px solid #e2e8f0;height:${totalH}px;background:${isToday?'#fafbff':'#fff'};">`;
+    html += `<div style="flex:1;min-width:${colW}px;position:relative;border-left:2px solid #cbd5e1;height:${totalH}px;background:${isToday?'#fafbff':'#fff'};">`;
 
     // Slot klik (z-index 1, di bawah block)
     for (let h = CAL_START_HOUR; h <= CAL_END_HOUR; h++) {
@@ -1621,6 +1684,7 @@ function fetchMasterData(callback) {
     .withSuccessHandler(function(data) {
       rawMapel    = data.mapelList    || [];
       rawRuangan  = data.ruanganList  || [];
+      buildKelasStructures(data.kelasList || []);   // build jenjangSistem dinamis
       masterDataLoaded = true;
       updateMasterDataLists();
       // Sync calendarRooms dari master ruangan
@@ -1668,9 +1732,10 @@ function updateMasterDataLists() {
 }
 
 // Filter mapel by kelas yang dipilih (untuk schedule & popup form)
-function getMapelByKelas(kelas) {
-  if (!kelas) return [...new Set(rawMapel.map(m => m.mapel))];
-  return rawMapel.filter(m => m.kelas === kelas).map(m => m.mapel);
+function getMapelByKelas(rombel) {
+  if (!rombel) return [...new Set(rawMapel.map(m => m.mapel))];
+  let tingkat = getTingkatFromRombel(rombel);
+  return rawMapel.filter(m => (m.kelas||'').toLowerCase() === tingkat.toLowerCase()).map(m => m.mapel);
 }
 
 function onScheduleKelasChange() {
@@ -1752,7 +1817,7 @@ function initModalMasterMapel() {
 }
 function bukaModalTambahMapel() {
   resetFormMapelKeDefault();
-  populateKelasSelect('mpKelas');
+  populateTingkatSelect('mpKelas');
   initModalMasterMapel();
   bsModalMasterMapel.show();
 }
@@ -1760,7 +1825,7 @@ function siapkanEditMapel(rowIndex) {
   let m = rawMapel.find(x => x.rowIndex === rowIndex); if (!m) return;
   document.getElementById('mpRowIndexHidden').value = m.rowIndex;
   document.getElementById('mpNama').value            = m.mapel;
-  populateKelasSelect('mpKelas');
+  populateTingkatSelect('mpKelas');
   document.getElementById('mpKelas').value = m.kelas;
   document.getElementById('mpHonorOffline').value = (m.honorOffline||0).toLocaleString('id-ID');
   document.getElementById('mpHonorOnline').value  = (m.honorOnline ||0).toLocaleString('id-ID');
@@ -1786,7 +1851,7 @@ function submitMapel() {
     honorOnline  : getRawNumber('mpHonorOnline')
   };
   if (!payload.mapel || !payload.kelas) { tampilkanToast('Mapel & Kelas wajib diisi!','warning'); return; }
-  if (!isValidComboValue('mpKelas')) { tampilkanToast('\u26a0\ufe0f Kelas tidak valid! Pilih dari daftar suggestion.','warning'); return; }
+  if (!isValidComboValue('mpKelas')) { tampilkanToast('\u26a0\ufe0f Tingkat tidak valid! Pilih dari daftar suggestion.','warning'); return; }
   setTombolLoading('btnSimpanMapel', true, 'Menyimpan...');
   tampilkanLoading('Menyimpan...');
   google.script.run
@@ -1811,6 +1876,209 @@ function konfirmasiHapusMapel(rowIndex, label) {
     .withSuccessHandler(res => { sembunyikanLoading(); tampilkanToast(res,'success'); masterDataLoaded=false; fetchMasterData(); })
     .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('❌ '+err.message,'error'); })
     .hapusMapel(rowIndex);
+}
+
+// ==========================================
+// TABEL & CRUD DATA KELAS (ROMBEL)
+// ==========================================
+let bsModalMasterKelas = null;
+
+function renderTabelKelas() {
+  let html = '';
+  // Sort by jenjang lalu tingkat
+  let sorted = [...rawKelas].sort((a,b) => {
+    if (a.jenjang !== b.jenjang) return a.jenjang.localeCompare(b.jenjang);
+    let na = parseInt(a.tingkat), nb = parseInt(b.tingkat);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return (a.tingkat||'').localeCompare(b.tingkat||'');
+  });
+  sorted.forEach(k => {
+    html += `<tr>
+      <td><span class="badge bg-secondary">${k.jenjang}</span></td>
+      <td class="fw-bold">${k.tingkat}</td>
+      <td><strong>${k.rombel}</strong></td>
+      <td class="text-center">
+        <div class="d-flex gap-1 justify-content-center flex-wrap">
+          <button class="btn btn-sm btn-outline-info py-0" onclick="bukaModalIsiSiswa('${k.rombel.replace(/'/g,"\\'")}')"><i class="fas fa-user-plus me-1"></i>Isi Siswa</button>
+          <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditKelas(${k.rowIndex})"><i class="fas fa-edit me-1"></i>Edit</button>
+          <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusKelas(${k.rowIndex},'${k.rombel.replace(/'/g,"\\'")}')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
+        </div>
+      </td>
+    </tr>`;
+  });
+  let body = document.getElementById('tabelKelasBody');
+  if (body) body.innerHTML = html || '<tr><td colspan="4" class="text-center text-muted py-4">Belum ada data kelas</td></tr>';
+}
+
+function initModalMasterKelas() {
+  if (!bsModalMasterKelas) bsModalMasterKelas = new bootstrap.Modal(document.getElementById('modalMasterKelas'));
+}
+function bukaModalTambahKelas() {
+  resetFormKelasKeDefault();
+  initModalMasterKelas();
+  bsModalMasterKelas.show();
+}
+function siapkanEditKelas(rowIndex) {
+  let k = rawKelas.find(x => x.rowIndex === rowIndex); if (!k) return;
+  document.getElementById('kRowIndexHidden').value = k.rowIndex;
+  document.getElementById('kJenjang').value = k.jenjang;
+  document.getElementById('kTingkat').value = k.tingkat;
+  document.getElementById('kRombel').value  = k.rombel;
+  document.getElementById('txtJudulFormKelas').innerText = 'Edit Kelas (' + k.rombel + ')';
+  document.getElementById('btnSimpanKelas').innerText = 'Update';
+  document.getElementById('btnSimpanKelas').className = 'btn btn-warning w-100 fw-bold py-2';
+  initModalMasterKelas();
+  bsModalMasterKelas.show();
+}
+function resetFormKelasKeDefault() {
+  document.getElementById('formKelas').reset();
+  document.getElementById('kRowIndexHidden').value = '';
+  document.getElementById('txtJudulFormKelas').innerText = 'Tambah Kelas / Rombel';
+  document.getElementById('btnSimpanKelas').innerText = 'Simpan';
+  document.getElementById('btnSimpanKelas').className = 'btn btn-primary w-100 fw-bold py-2';
+}
+function submitKelas() {
+  let payload = {
+    rowIndex: document.getElementById('kRowIndexHidden').value,
+    jenjang : document.getElementById('kJenjang').value.trim(),
+    tingkat : document.getElementById('kTingkat').value.trim(),
+    rombel  : document.getElementById('kRombel').value.trim()
+  };
+  if (!payload.jenjang || !payload.tingkat || !payload.rombel) {
+    tampilkanToast('Jenjang, Tingkat, dan Rombel wajib diisi!', 'warning'); return;
+  }
+  setTombolLoading('btnSimpanKelas', true, 'Menyimpan...');
+  tampilkanLoading('Menyimpan kelas...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanKelas', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
+      let tipe = res.includes('\u2705') ? 'success' : 'warning';
+      tampilkanToast(res, tipe);
+      if (tipe === 'success') {
+        bsModalMasterKelas.hide();
+        resetFormKelasKeDefault();
+        masterDataLoaded = false;
+        fetchMasterData(function() { renderTabelKelas(); });
+      }
+    })
+    .withFailureHandler(err => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanKelas', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
+      tampilkanToast('\u274c Error: ' + err.message, 'error');
+    })
+    .simpanKelas(payload);
+}
+function konfirmasiHapusKelas(rowIndex, label) {
+  if (!confirm('Yakin hapus kelas "' + label + '"?\n\nPastikan tidak ada siswa/jadwal yang masih pakai kelas ini.')) return;
+  tampilkanLoading('Menghapus kelas...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      tampilkanToast(res, res.includes('\u2705') ? 'success' : 'warning');
+      masterDataLoaded = false;
+      fetchMasterData(function() { renderTabelKelas(); });
+    })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c Error: ' + err.message, 'error'); })
+    .hapusKelas(rowIndex);
+}
+
+// ==========================================
+// ISI/PINDAH SISWA KE ROMBEL (BULK)
+// ==========================================
+let bsModalIsiSiswa = null;
+let isiSiswaRombelTarget = '';
+
+function bukaModalIsiSiswa(rombelTarget) {
+  isiSiswaRombelTarget = rombelTarget;
+  document.getElementById('isiSiswaRombelTarget').innerText = rombelTarget;
+  document.getElementById('isiSiswaCari').value = '';
+  // Populate filter rombel dropdown dari semua rombel yang ada (kecuali target)
+  let sel = document.getElementById('isiSiswaFilterRombel');
+  let opts = '<option value="">Semua siswa aktif</option><option value="__none__">Belum punya rombel</option>';
+  let semuaRombel = [...new Set(rawSiswa.map(s => s.kelas).filter(k => k && k !== rombelTarget))].sort();
+  semuaRombel.forEach(r => { opts += `<option value="${r}">${r}</option>`; });
+  sel.innerHTML = opts;
+  sel.value = '';
+  renderDaftarSiswaPindah();
+  if (!bsModalIsiSiswa) bsModalIsiSiswa = new bootstrap.Modal(document.getElementById('modalIsiSiswa'));
+  bsModalIsiSiswa.show();
+}
+
+function getSiswaUntukDipindah() {
+  let filterRombel = document.getElementById('isiSiswaFilterRombel').value;
+  let cari = document.getElementById('isiSiswaCari').value.trim().toLowerCase();
+  let semuaRombelAda = new Set(rawKelas.map(k => k.rombel.toLowerCase()));
+  return rawSiswa.filter(s => {
+    if (s.status !== 'Aktif') return false;
+    if (s.kelas === isiSiswaRombelTarget) return false;  // udah di target, skip
+    if (filterRombel === '__none__') {
+      // "belum punya rombel" = kelas kosong ATAU kelas tidak terdaftar di Data Kelas
+      if (s.kelas && semuaRombelAda.has(s.kelas.toLowerCase())) return false;
+    } else if (filterRombel && s.kelas !== filterRombel) return false;
+    if (cari && !s.nama.toLowerCase().includes(cari) && !s.id.toLowerCase().includes(cari)) return false;
+    return true;
+  });
+}
+
+function renderDaftarSiswaPindah() {
+  let list = getSiswaUntukDipindah();
+  let html = '';
+  list.forEach(s => {
+    let rombelLabel = s.kelas ? s.kelas : '<span class="text-muted fst-italic">belum diatur</span>';
+    html += `<tr>
+      <td><input type="checkbox" class="form-check-input siswa-pindah-chk" data-id="${s.id}" onchange="updateIsiSiswaCounter()"></td>
+      <td class="text-muted small">${s.id}</td>
+      <td class="fw-bold">${s.nama}</td>
+      <td>${rombelLabel}</td>
+    </tr>`;
+  });
+  let tbody = document.getElementById('tabelIsiSiswaBody');
+  tbody.innerHTML = html;
+  document.getElementById('isiSiswaEmpty').classList.toggle('d-none', list.length > 0);
+  updateIsiSiswaCounter();
+}
+
+function toggleSemuaSiswaPindah(checked) {
+  document.querySelectorAll('#tabelIsiSiswaBody .siswa-pindah-chk').forEach(c => c.checked = checked);
+  updateIsiSiswaCounter();
+}
+
+function updateIsiSiswaCounter() {
+  let n = document.querySelectorAll('#tabelIsiSiswaBody .siswa-pindah-chk:checked').length;
+  document.getElementById('isiSiswaCounter').innerText = n + ' dipilih';
+}
+
+function submitPindahSiswa() {
+  let checked = [...document.querySelectorAll('#tabelIsiSiswaBody .siswa-pindah-chk:checked')];
+  if (checked.length === 0) { tampilkanToast('\u26a0\ufe0f Pilih minimal 1 siswa', 'warning'); return; }
+  let ids = checked.map(c => c.getAttribute('data-id'));
+  if (!confirm('Pindahkan ' + ids.length + ' siswa ke rombel "' + isiSiswaRombelTarget + '"?')) return;
+
+  setTombolLoading('btnSimpanIsiSiswa', true, 'Memindahkan...');
+  tampilkanLoading('Memindahkan ' + ids.length + ' siswa...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanIsiSiswa', false, '', '<i class="fas fa-arrow-right me-1"></i>Pindahkan ke rombel target', 'btn btn-info text-white w-100 fw-bold py-2');
+      let tipe = res.includes('\u2705') ? 'success' : 'warning';
+      tampilkanToast(res, tipe);
+      if (tipe === 'success') {
+        bsModalIsiSiswa.hide();
+        // Reload siswa supaya tampilan rombel terbaru muncul
+        google.script.run.withSuccessHandler(data => {
+          rawSiswa = data.siswaList || [];
+          if (typeof updateSiswaList === 'function') updateSiswaList();
+          if (typeof terapkanFilterSiswa === 'function') terapkanFilterSiswa();
+        }).getSistemData();
+      }
+    })
+    .withFailureHandler(err => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanIsiSiswa', false, '', '<i class="fas fa-arrow-right me-1"></i>Pindahkan ke rombel target', 'btn btn-info text-white w-100 fw-bold py-2');
+      tampilkanToast('\u274c Error: ' + err.message, 'error');
+    })
+    .pindahSiswaKeRombel(isiSiswaRombelTarget, ids);
 }
 
 // ==========================================
@@ -2227,8 +2495,9 @@ function siapkanEditSchedule(rowIndex) {
   document.getElementById('txtJudulFormSchedule').innerText = 'Edit Jadwal (' + s.mapel + ' \u00b7 ' + s.kelas + ')';
   document.getElementById('btnSimpanSchedule').innerText = 'Update Jadwal';
   document.getElementById('btnSimpanSchedule').className = 'btn btn-warning w-100 fw-bold py-2';
-  // Tampilkan tombol Hapus hanya di edit mode
+  // Tampilkan tombol Hapus & Absensi hanya di edit mode
   document.getElementById('btnHapusSchedule').classList.remove('d-none');
+  document.getElementById('btnAbsensiSchedule').classList.remove('d-none');
   autoFillHonorSesi();
   initModalSchedule();
   bsModalSchedule.show();
@@ -2242,9 +2511,11 @@ function resetFormScheduleKeDefault() {
   document.getElementById('txtJudulFormSchedule').innerText = 'Tambah Jadwal';
   document.getElementById('btnSimpanSchedule').innerText = 'Simpan Jadwal';
   document.getElementById('btnSimpanSchedule').className = 'btn btn-success w-100 fw-bold py-2';
-  // Sembunyikan tombol Hapus (hanya muncul saat edit)
+  // Sembunyikan tombol Hapus & Absensi (hanya muncul saat edit)
   let btnHapus = document.getElementById('btnHapusSchedule');
   if (btnHapus) btnHapus.classList.add('d-none');
+  let btnAbs = document.getElementById('btnAbsensiSchedule');
+  if (btnAbs) btnAbs.classList.add('d-none');
 }
 
 // Handler: konfirmasi & hapus jadwal dari modal Edit Schedule
@@ -2296,22 +2567,184 @@ function onGuruSearchChange() {
   }
   autoFillHonorSesi();
 }
+// ==========================================
+// ABSENSI PER SESI
+// ==========================================
+let bsModalAbsensi = null;
+let absensiSesiSaatIni = null;  // { tanggal, rombel, mapel, jamMulai, idGuru, namaGuru, siswaList }
+
+function initModalAbsensi() {
+  if (!bsModalAbsensi) bsModalAbsensi = new bootstrap.Modal(document.getElementById('modalAbsensi'));
+}
+
+// Dipanggil dari tombol "Absensi" di modal Edit Schedule
+function bukaModalAbsensiDariSchedule() {
+  let rowIndex = document.getElementById('sRowIndexHidden').value;
+  if (!rowIndex) { tampilkanToast('Tidak ada jadwal terpilih', 'warning'); return; }
+  let s = rawSchedule.find(x => x.rowIndex === parseInt(rowIndex));
+  if (!s) { tampilkanToast('Data jadwal tidak ditemukan', 'warning'); return; }
+
+  // Ambil siswa aktif di rombel ini
+  let rombel = s.kelas;
+  let siswaRombel = rawSiswa.filter(x => (x.kelas||'').toLowerCase() === rombel.toLowerCase() && x.status === 'Aktif');
+
+  // Sesi info (tanggal bisa ISO atau "YYYY-MM-DD")
+  let tglStr = (s.tgl||'').split('T')[0];
+
+  absensiSesiSaatIni = {
+    tanggal : tglStr,
+    rombel  : rombel,
+    mapel   : s.mapel,
+    jamMulai: s.jamMulai,
+    idGuru  : s.idGuru,
+    namaGuru: s.namaGuru,
+    siswaList: siswaRombel
+  };
+
+  // Update header info
+  document.getElementById('absensiSesiInfo').innerHTML =
+    '<strong>' + s.mapel + '</strong> \u00b7 ' + rombel +
+    ' \u00b7 ' + tglStr + ' \u00b7 ' + s.jamMulai +
+    ' \u00b7 Guru: ' + (s.namaGuru || '-');
+
+  // Counter
+  document.getElementById('absensiCounter').innerText = siswaRombel.length + ' siswa';
+
+  // Empty state
+  let emptyEl = document.getElementById('absensiEmptyState');
+  let wrapEl  = document.getElementById('absensiTableWrap');
+  let btnSimpan = document.getElementById('btnSimpanAbsensi');
+  if (siswaRombel.length === 0) {
+    emptyEl.classList.remove('d-none');
+    wrapEl.classList.add('d-none');
+    btnSimpan.disabled = true;
+    document.getElementById('tabelAbsensiBody').innerHTML = '';
+    initModalAbsensi();
+    bsModalAbsensi.show();
+    return;
+  }
+  emptyEl.classList.add('d-none');
+  wrapEl.classList.remove('d-none');
+  btnSimpan.disabled = false;
+
+  // Render rows dulu (default semua Hadir), lalu load existing dari backend
+  renderAbsensiRows(siswaRombel, {});
+  initModalAbsensi();
+  bsModalAbsensi.show();
+
+  // Load existing absensi (kalau sesi ini sudah pernah diabsen)
+  tampilkanLoading('Memuat absensi sebelumnya...');
+  google.script.run
+    .withSuccessHandler(existing => {
+      sembunyikanLoading();
+      if (existing && existing.length > 0) {
+        let map = {};
+        existing.forEach(e => { map[e.idSiswa] = e; });
+        renderAbsensiRows(siswaRombel, map);
+        tampilkanToast('\u2139\ufe0f Memuat ' + existing.length + ' data absensi yang sudah ada', 'info');
+      }
+    })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u26a0\ufe0f ' + err.message, 'warning'); })
+    .getAbsensiSesi(tglStr, rombel, s.jamMulai);
+}
+
+function renderAbsensiRows(siswaList, existingMap) {
+  let opts = ['Hadir','Izin','Sakit','Alpha'];
+  let html = '';
+  siswaList.forEach(siswa => {
+    let existing = existingMap[siswa.id] || { status: 'Hadir', catatan: '' };
+    let selectOpts = opts.map(o => `<option value="${o}" ${o===existing.status?'selected':''}>${o}</option>`).join('');
+    html += `<tr data-id="${siswa.id}">
+      <td><div class="fw-bold">${siswa.nama}</div><div class="text-muted small">${siswa.id}</div></td>
+      <td><select class="form-select form-select-sm absensi-status" onchange="onAbsensiStatusChange(this)">${selectOpts}</select></td>
+      <td><input type="text" class="form-control form-control-sm absensi-catatan" placeholder="Telat 10 mnt, dll" value="${(existing.catatan||'').replace(/"/g,'&quot;')}"></td>
+    </tr>`;
+  });
+  let tbody = document.getElementById('tabelAbsensiBody');
+  tbody.innerHTML = html;
+  // Apply color hint ke semua select awal
+  tbody.querySelectorAll('.absensi-status').forEach(s => applyAbsensiStatusColor(s));
+}
+
+function applyAbsensiStatusColor(selectEl) {
+  let v = selectEl.value;
+  selectEl.classList.remove('border-success','border-warning','border-info','border-danger','text-success','text-warning','text-info','text-danger','fw-bold');
+  selectEl.classList.add('fw-bold');
+  if (v === 'Hadir') selectEl.classList.add('border-success','text-success');
+  else if (v === 'Izin') selectEl.classList.add('border-info','text-info');
+  else if (v === 'Sakit') selectEl.classList.add('border-warning','text-warning');
+  else if (v === 'Alpha') selectEl.classList.add('border-danger','text-danger');
+}
+
+function onAbsensiStatusChange(selectEl) { applyAbsensiStatusColor(selectEl); }
+
+function setSemuaAbsensi(status) {
+  document.querySelectorAll('#tabelAbsensiBody .absensi-status').forEach(s => {
+    s.value = status;
+    applyAbsensiStatusColor(s);
+  });
+}
+
+function submitAbsensi() {
+  if (!absensiSesiSaatIni) { tampilkanToast('\u274c Data sesi hilang', 'error'); return; }
+  let rows = document.querySelectorAll('#tabelAbsensiBody tr');
+  if (rows.length === 0) { tampilkanToast('\u26a0\ufe0f Tidak ada siswa', 'warning'); return; }
+
+  let entries = [];
+  rows.forEach(tr => {
+    let idSiswa = tr.getAttribute('data-id');
+    let siswa = absensiSesiSaatIni.siswaList.find(x => x.id === idSiswa);
+    if (!siswa) return;
+    let status = tr.querySelector('.absensi-status').value;
+    let catatan = tr.querySelector('.absensi-catatan').value.trim();
+    entries.push({ idSiswa: siswa.id, namaSiswa: siswa.nama, status: status, catatan: catatan });
+  });
+
+  let payload = {
+    tanggal : absensiSesiSaatIni.tanggal,
+    rombel  : absensiSesiSaatIni.rombel,
+    mapel   : absensiSesiSaatIni.mapel,
+    jamMulai: absensiSesiSaatIni.jamMulai,
+    idGuru  : absensiSesiSaatIni.idGuru,
+    namaGuru: absensiSesiSaatIni.namaGuru,
+    entries : entries
+  };
+
+  setTombolLoading('btnSimpanAbsensi', true, 'Menyimpan...');
+  tampilkanLoading('Menyimpan absensi...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanAbsensi', false, '', '<i class="fas fa-save me-1"></i>Simpan Absensi', 'btn btn-info text-white w-100 fw-bold py-2');
+      let tipe = res.includes('\u2705') ? 'success' : 'warning';
+      tampilkanToast(res, tipe);
+      if (tipe === 'success') bsModalAbsensi.hide();
+    })
+    .withFailureHandler(err => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanAbsensi', false, '', '<i class="fas fa-save me-1"></i>Simpan Absensi', 'btn btn-info text-white w-100 fw-bold py-2');
+      tampilkanToast('\u274c Error: ' + err.message, 'error');
+    })
+    .simpanAbsensi(payload);
+}
+
 function autoFillHonorSesi() {
   let mapel = document.getElementById('sMapel').value.trim();
-  let kelas = document.getElementById('sKelas').value.trim();
+  let rombel = document.getElementById('sKelas').value.trim();
+  let tingkat = getTingkatFromRombel(rombel);
   let tipeEl = document.querySelector('input[name="sTipeSesi"]:checked');
   let tipe   = tipeEl ? tipeEl.value : 'Offline';
   let el = document.getElementById('sHonorInfo');
-  if (!mapel || !kelas) { el.innerHTML = '-'; return; }
-  let entry = rawMapel.find(m => m.mapel.toLowerCase() === mapel.toLowerCase() && m.kelas.toLowerCase() === kelas.toLowerCase());
+  if (!mapel || !rombel) { el.innerHTML = '-'; return; }
+  let entry = rawMapel.find(m => m.mapel.toLowerCase() === mapel.toLowerCase() && (m.kelas||'').toLowerCase() === tingkat.toLowerCase());
   if (entry) {
     let honor = (tipe === 'Online') ? entry.honorOnline : entry.honorOffline;
     let lainHonor = (tipe === 'Online') ? entry.honorOffline : entry.honorOnline;
     let lainLabel = (tipe === 'Online') ? 'Offline' : 'Online';
-    el.innerHTML = '<span class="fw-bold text-success">Rp ' + honor.toLocaleString('id-ID') + '</span> <span class="text-muted">/ sesi (' + tipe + ')</span>' +
+    el.innerHTML = '<span class="fw-bold text-success">Rp ' + honor.toLocaleString('id-ID') + '</span> <span class="text-muted">/ sesi (' + tipe + ', tingkat ' + tingkat + ')</span>' +
                    '<br><span class="text-muted small">' + lainLabel + ': Rp ' + lainHonor.toLocaleString('id-ID') + '</span>';
   } else {
-    el.innerHTML = '<span class="text-warning small fw-bold">\u26a0\ufe0f Mata pelajaran/kelas ini belum diatur honornya</span>';
+    el.innerHTML = '<span class="text-warning small fw-bold">\u26a0\ufe0f Honor untuk ' + mapel + ' tingkat ' + tingkat + ' belum diatur</span>';
   }
 }
 function submitSchedule() {

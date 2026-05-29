@@ -96,3 +96,32 @@ function bulkHapusSiswaDariSheet(idList) {
   invalidateCache();
   return "🗑 Sukses menghapus " + countDeleted + " data siswa dari spreadsheet!";
 }
+
+// ==========================================
+// BULK PINDAH SISWA KE ROMBEL
+// ==========================================
+function pindahSiswaKeRombel(rombelTarget, idSiswaArr) {
+  if (!rombelTarget || rombelTarget.toString().trim() === '')
+    return '\u274c Rombel target tidak boleh kosong.';
+  if (!idSiswaArr || idSiswaArr.length === 0)
+    return '\u274c Tidak ada siswa yang dipilih.';
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CONFIG.SHEET_SISWA) || ss.getSheets()[0];
+  var data = sheet.getDataRange().getValues();
+
+  var idSet = {};
+  idSiswaArr.forEach(function(id){ idSet[id.toString().trim().toUpperCase()] = true; });
+
+  var count = 0;
+  for (var i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    var rowId = data[i][0].toString().trim().toUpperCase();
+    if (idSet[rowId]) {
+      sheet.getRange(i + 1, 3).setValue(rombelTarget);  // kolom C (kelas/rombel)
+      count++;
+    }
+  }
+  invalidateCache();
+  return '\u2705 ' + count + ' siswa berhasil dipindahkan ke rombel ' + rombelTarget + '.';
+}

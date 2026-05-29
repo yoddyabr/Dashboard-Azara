@@ -237,6 +237,19 @@ function hapusSchedule(rowIndex) {
 function getRekapHonorBulanan(bulan, tahun) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
+  // Build map rombel → tingkat dari Data Kelas
+  var rombelToTingkat = {};
+  var sheetKelas = ss.getSheetByName(CONFIG.SHEET_KELAS);
+  if (sheetKelas) {
+    var dkls = sheetKelas.getDataRange().getValues();
+    for (var rk = 1; rk < dkls.length; rk++) {
+      if (!dkls[rk][2]) continue;
+      rombelToTingkat[dkls[rk][2].toString().trim().toLowerCase()] =
+        dkls[rk][1] ? dkls[rk][1].toString().trim().toLowerCase() : '';
+    }
+  }
+
+  // Build honor map: key = "mapel||tingkat" → {offline, online}
   var honorMap = {};
   var sheetMapel = ss.getSheetByName(CONFIG.SHEET_MAPEL);
   if (sheetMapel) {
@@ -245,7 +258,7 @@ function getRekapHonorBulanan(bulan, tahun) {
       if (!dm[h][0]) continue;
       var key = dm[h][0].toString().trim().toLowerCase()
               + "||"
-              + (dm[h][1] ? dm[h][1].toString().trim().toLowerCase() : "");
+              + (dm[h][1] ? dm[h][1].toString().trim().toLowerCase() : "");  // tingkat
       honorMap[key] = {
         offline: Number(dm[h][2]) || 0,
         online : Number(dm[h][3]) || 0
@@ -270,11 +283,13 @@ function getRekapHonorBulanan(bulan, tahun) {
     var idGuru   = row[7] ? row[7].toString().trim() : "";
     var namaGuru = row[8] ? row[8].toString().trim() : "";
     var mapel    = row[6] ? row[6].toString().trim() : "";
-    var kelas    = row[5] ? row[5].toString().trim() : "";
+    var rombel   = row[5] ? row[5].toString().trim() : "";
     var tipeSesi = row[9] ? row[9].toString().trim().toLowerCase() : "offline";
     if (!idGuru) continue;
 
-    var honorKey = mapel.toLowerCase() + "||" + kelas.toLowerCase();
+    // Rombel → tingkat (fallback ke rombel itu sendiri kalau tidak ada di map)
+    var tingkat = rombelToTingkat[rombel.toLowerCase()] || rombel.toLowerCase();
+    var honorKey = mapel.toLowerCase() + "||" + tingkat;
     var honorEntry = honorMap[honorKey] || { offline: 0, online: 0 };
     var honorPerSesi = (tipeSesi === "online") ? honorEntry.online : honorEntry.offline;
 
@@ -286,7 +301,7 @@ function getRekapHonorBulanan(bulan, tahun) {
     rekapMap[idGuru].detail.push({
       tgl         : tgl.toISOString(),
       mapel       : mapel,
-      kelas       : kelas,
+      kelas       : rombel,
       tipeSesi    : tipeSesi,
       honorPerSesi: honorPerSesi
     });
