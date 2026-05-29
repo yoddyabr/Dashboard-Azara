@@ -9,7 +9,16 @@ function ensureSheetAbsensi_() {
   var sheet = ss.getSheetByName(CONFIG.SHEET_ABSENSI);
   if (!sheet) {
     sheet = ss.insertSheet(CONFIG.SHEET_ABSENSI);
-    sheet.appendRow(['Tanggal','Rombel','Mapel','JamMulai','IDGuru','NamaGuru','IDSiswa','NamaSiswa','Status','Catatan','Timestamp']);
+    sheet.appendRow(['Tanggal','Rombel','Mapel','JamMulai','IDGuru','NamaGuru','IDSiswa','NamaSiswa','Status','Catatan','Timestamp','Nilai','Materi']);
+    return sheet;
+  }
+  // Migrasi: tambah kolom Nilai (12) + Materi (13) kalau belum ada
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 12) {
+    sheet.getRange(1, 12).setValue('Nilai');
+  }
+  if (lastCol < 13) {
+    sheet.getRange(1, 13).setValue('Materi');
   }
   return sheet;
 }
@@ -42,10 +51,13 @@ function normJam_(val) {
 // AMBIL ABSENSI 1 SESI (untuk preload saat buka modal)
 // Return: array of { idSiswa, status, catatan }
 // ==========================================
+// Return: { materi, adaNilai, entries: [{ idSiswa, status, catatan, nilai }] }
 function getAbsensiSesi(tanggal, rombel, jamMulai) {
   var sheet = ensureSheetAbsensi_();
   var data = sheet.getDataRange().getValues();
-  var result = [];
+  var entries = [];
+  var materi = '';
+  var adaNilai = false;
   var tglKey = normTgl_(tanggal);
   var jamKey = normJam_(jamMulai);
   var rombelKey = (rombel||'').toString().trim().toLowerCase();
@@ -53,14 +65,20 @@ function getAbsensiSesi(tanggal, rombel, jamMulai) {
     if (normTgl_(data[i][0]) === tglKey
         && (data[i][1]||'').toString().trim().toLowerCase() === rombelKey
         && normJam_(data[i][3]) === jamKey) {
-      result.push({
+      var nilai = data[i][11];
+      var nilaiVal = (nilai !== '' && nilai !== null && nilai !== undefined && !isNaN(nilai)) ? Number(nilai) : '';
+      if (nilaiVal !== '' && nilaiVal !== null) adaNilai = true;
+      entries.push({
         idSiswa : data[i][6] ? data[i][6].toString().trim() : '',
         status  : data[i][8] ? data[i][8].toString().trim() : 'Hadir',
-        catatan : data[i][9] ? data[i][9].toString().trim() : ''
+        catatan : data[i][9] ? data[i][9].toString().trim() : '',
+        nilai   : nilaiVal
       });
+      // Materi sama untuk semua baris satu sesi, ambil dari baris pertama yang ada
+      if (!materi && data[i][12]) materi = data[i][12].toString();
     }
   }
-  return result;
+  return { materi: materi, adaNilai: adaNilai, entries: entries };
 }
 
 // ==========================================
@@ -95,19 +113,15 @@ function simpanAbsensi(payload) {
   // Insert baris baru
   var now = new Date();
   var rows = [];
+  var materi = payload.materi || '';
   payload.entries.forEach(function(e) {
+    var nilai = (e.nilai !== '' && e.nilai !== null && e.nilai !== undefined && !isNaN(e.nilai)) ? Number(e.nilai) : '';
     rows.push([
-      tglKey,
-      payload.rombel,
-      payload.mapel || '',
-      jamKey,
-      payload.idGuru || '',
-      payload.namaGuru || '',
-      e.idSiswa || '',
-      e.namaSiswa || '',
-      e.status || 'Hadir',
-      e.catatan || '',
-      now
+      tglKey, payload.rombel, payload.mapel || '', jamKey,
+      payload.idGuru || '', payload.namaGuru || '',
+      e.idSiswa || '', e.namaSiswa || '',
+      e.status || 'Hadir', e.catatan || '',
+      now, nilai, materi
     ]);
   });
   if (rows.length > 0) {
@@ -115,6 +129,30 @@ function simpanAbsensi(payload) {
   }
 
   return '\u2705 Absensi tersimpan (' + rows.length + ' siswa).';
+}
+
+
+// ==========================================
+// CEK STATUS ABSENSI BULK SESI (untuk badge di list jadwal guru)
+// Return: map { "tglKey|rombelKey|jamKey" : { jumlahHadir, jumlahTotal, adaMateri } }
+// ==========================================
+function getStatusAbsensiBulkSesi(idGuru, bulan, tahun) {
+  var sheet = ensureSheetAbsensi_();
+  var data = sheet.getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    var tgl = data[i][0] instanceof Date ? data[i][0] : new Date(data[i][0]);
+    if (isNaN(tgl.getTime())) continue;
+    if ((tgl.getMonth()+1) !== parseInt(bulan) || tgl.getFullYear() !== parseInt(tahun)) continue;
+    if (idGuru && (data[i][4]||'').toString().trim() !== idGuru.toString().trim()) continue;
+    var key = normTgl_(data[i][0]) + '|' + (data[i][1]||'').toString().trim().toLowerCase() + '|' + normJam_(data[i][3]);
+    if (!map[key]) map[key] = { jumlahHadir: 0, jumlahTotal: 0, adaMateri: false };
+    map[key].jumlahTotal++;
+    if ((data[i][8]||'').toString().toLowerCase() === 'hadir') map[key].jumlahHadir++;
+    if (data[i][12]) map[key].adaMateri = true;
+  }
+  return map;
 }
 
 // ==========================================

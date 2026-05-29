@@ -204,6 +204,16 @@ function switchView(viewName) {
   if (viewName === 'data-mapel' && masterDataLoaded) { applyFiltersMapel(); }
   if (viewName === 'data-ruangan' && masterDataLoaded) { renderTabelRuanganMaster(); }
   if (viewName === 'data-kelas' && masterDataLoaded) { renderTabelKelas(); }
+  if (viewName === 'rekap-honor') { initRekapHonor(); }
+  if (viewName === 'absensi') {
+    if (typeof rawSchedule === 'undefined' || rawSchedule.length === 0) {
+      // Schedule belum di-fetch — trigger fetch via switchView ke schedule? Lebih simpel: panggil fetchScheduleData
+      if (typeof fetchScheduleData === 'function') fetchScheduleData(function(){ initIsiAbsensi(); });
+      else initIsiAbsensi();
+    } else {
+      initIsiAbsensi();
+    }
+  }
 }
 function switchViewMobile(viewName) {
   switchView(viewName);
@@ -235,6 +245,12 @@ function fetchData(pesanLoading) {
       applyFilters();
       applyFiltersPembayaran();
       hitungTunggakanBadge();
+      // Prefetch master data (untuk grouping per tingkat di dashboard)
+      if (!masterDataLoaded) {
+        fetchMasterData(function() {
+          processDashboard();  // re-render setelah rawKelas tersedia
+        });
+      }
     })
     .withFailureHandler(function(err) {
       sembunyikanLoading();
@@ -262,23 +278,69 @@ function processDashboard() {
   });
   let totalPemasukan = filteredPay.reduce((a, b) => a + (b.nominal || 0), 0);
   document.getElementById('txtTotalOmset').innerText = "Rp " + Math.round(totalPemasukan).toLocaleString('id-ID');
-  let totalSiswaAktif = 0; let countKelas = {};
+  let totalSiswaAktif = 0; let countRombel = {};
   rawSiswa.forEach(s => {
     if (s.status === 'Aktif') {
-      let clsKey = s.kelas ? s.kelas.toString().trim() : "";
-      countKelas[clsKey] = (countKelas[clsKey] || 0) + 1;
+      let k = (s.kelas||'').toString().trim().toLowerCase();
+      countRombel[k] = (countRombel[k] || 0) + 1;
       totalSiswaAktif++;
     }
   });
   document.getElementById('txtTotalSiswaAktif').innerText = totalSiswaAktif + " Siswa";
+
+  // Group by jenjang → tingkat (jumlahkan semua rombel di tingkat sama)
+  let jenjangData = {};
+  if (rawKelas && rawKelas.length > 0) {
+    rawKelas.forEach(k => {
+      if (!jenjangData[k.jenjang]) jenjangData[k.jenjang] = {};
+      let tk = k.tingkat || '?';
+      if (!jenjangData[k.jenjang][tk]) jenjangData[k.jenjang][tk] = { total: 0, rombelList: [] };
+      let c = countRombel[k.rombel.toLowerCase()] || 0;
+      jenjangData[k.jenjang][tk].total += c;
+      jenjangData[k.jenjang][tk].rombelList.push({ rombel: k.rombel, count: c });
+    });
+  } else {
+    // Fallback: rawKelas belum termuat → kelompokkan langsung dari kelas siswa (rombel = tingkat = nama itu sendiri)
+    Object.keys(countRombel).forEach(k => {
+      if (!k) return;
+      let jenjang = 'Lainnya';
+      if (/^sd/i.test(k) || /^[1-6]$/.test(k)) jenjang = 'SD';
+      else if (/^smp/i.test(k) || /^[789]$/.test(k)) jenjang = 'SMP';
+      else if (/^sma/i.test(k) || /^1[0-2]/.test(k)) jenjang = 'SMA';
+      let label = k.toUpperCase();
+      if (!jenjangData[jenjang]) jenjangData[jenjang] = {};
+      jenjangData[jenjang][label] = { total: countRombel[k], rombelList: [{ rombel: label, count: countRombel[k] }] };
+    });
+  }
+
+  // Urutan jenjang sesuai jenjangSistem (SD → SMP → SMA)
+  let jenjangOrder = jenjangSistem.map(j => j.nama).filter(n => jenjangData[n]);
+  // Tambahkan jenjang lain yang belum di-cover
+  Object.keys(jenjangData).forEach(j => { if (!jenjangOrder.includes(j)) jenjangOrder.push(j); });
+
   let jenjangHtml = '';
-  jenjangSistem.forEach(jenjang => {
-    jenjangHtml += `<div class="jenjang-row"><div class="jenjang-label">${jenjang.nama}</div><div class="jenjang-grid">`;
-    jenjang.daftar.forEach(cls => {
-      let count = countKelas[cls] || 0;
-      let activeClass = count > 0 ? "has-student" : "";
-      let shortName = cls.replace(/[^0-9]/g, '') || cls;
-      jenjangHtml += `<div class="kelas-box ${activeClass}" title="${cls}"><span class="kelas-name">${shortName}</span><span class="kelas-count">${count}</span></div>`;
+  jenjangOrder.forEach(jenjang => {
+    let tingkatList = Object.keys(jenjangData[jenjang]).sort((a,b) => {
+      let na = parseInt(a), nb = parseInt(b);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.localeCompare(b);
+    });
+    let jenjangTotal = tingkatList.reduce((sum,t) => sum + jenjangData[jenjang][t].total, 0);
+    jenjangHtml += `<div class="jenjang-row">
+      <div class="jenjang-label">${jenjang}<div class="jenjang-total">${jenjangTotal}</div></div>
+      <div class="jenjang-grid">`;
+    tingkatList.forEach(t => {
+      let info = jenjangData[jenjang][t];
+      let activeClass = info.total > 0 ? "has-student" : "";
+      let breakdown = info.rombelList.map(r => `${r.rombel}: ${r.count} siswa`).join('\n');
+      let subInfo = info.rombelList.length > 1
+        ? `<span class="kelas-sub">${info.rombelList.length} rombel</span>`
+        : (info.rombelList[0] ? `<span class="kelas-sub">${info.rombelList[0].rombel}</span>` : '');
+      jenjangHtml += `<div class="kelas-box ${activeClass}" title="${breakdown}">
+        <span class="kelas-name">Tingkat ${t}</span>
+        <span class="kelas-count">${info.total}</span>
+        ${subInfo}
+      </div>`;
     });
     jenjangHtml += `</div></div>`;
   });
@@ -1550,36 +1612,157 @@ function loadRekapHonor() {
   let tahun = document.getElementById('rekapTahun').value;
   if (!bulan || !tahun) { tampilkanToast('Pilih bulan dan tahun!', 'warning'); return; }
   tampilkanLoading('Menghitung rekap honor...');
+  // Fetch rekap + status pembayaran paralel
+  let rekapData = null, statusData = null;
+  let done = 0;
+  function tryRender() {
+    if (done < 2) return;
+    sembunyikanLoading();
+    renderRekapHonor(rekapData || [], bulan, tahun, statusData || {});
+  }
   google.script.run
-    .withSuccessHandler(function(rekap) {
-      sembunyikanLoading();
-      renderRekapHonor(rekap, bulan, tahun);
-    })
-    .withFailureHandler(function(err) {
-      sembunyikanLoading();
-      tampilkanToast('❌ Error: ' + err.message, 'error');
-    })
+    .withSuccessHandler(function(rekap) { rekapData = rekap; done++; tryRender(); })
+    .withFailureHandler(function(err) { done++; tryRender(); tampilkanToast('\u274c ' + err.message, 'error'); })
     .getRekapHonorBulanan(parseInt(bulan), parseInt(tahun));
+  google.script.run
+    .withSuccessHandler(function(status) { statusData = status; done++; tryRender(); })
+    .withFailureHandler(function(err) { done++; tryRender(); })
+    .getStatusBayarHonor(parseInt(bulan), parseInt(tahun));
 }
-function renderRekapHonor(rekap, bulan, tahun) {
+function renderRekapHonor(rekap, bulan, tahun, statusMap) {
   let periodeStr       = namaBulanArr[parseInt(bulan)-1] + ' ' + tahun;
   let totalKeseluruhan = 0;
   let html = '';
+  statusMap = statusMap || {};
   if (!rekap || rekap.length === 0) {
-    html = `<tr><td colspan="4" class="text-center text-muted py-4">Tidak ada data jadwal untuk ${periodeStr}</td></tr>`;
+    html = `<tr><td colspan="6" class="text-center text-muted py-4">Tidak ada data jadwal untuk ${periodeStr}</td></tr>`;
   } else {
     rekap.forEach(g => {
       totalKeseluruhan += g.totalHonor;
+      let st = statusMap[g.id];
+      let statusHtml, btnHtml;
+      if (st) {
+        let tglBayar = st.tglBayar ? new Date(st.tglBayar).toLocaleDateString('id-ID') : '-';
+        statusHtml = `<span class="badge bg-success" title="Dibayar ${tglBayar}"><i class="fas fa-check-circle me-1"></i>Lunas</span>`;
+        btnHtml = `<button class="btn btn-sm btn-outline-secondary py-0" onclick="batalkanHonorBayar('${g.id}','${g.nama.replace(/'/g,"\\'")}')"><i class="fas fa-undo me-1"></i>Batalkan</button>`;
+      } else {
+        statusHtml = `<span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Belum</span>`;
+        btnHtml = `<button class="btn btn-sm btn-success py-0" onclick="tandaiHonorBayar('${g.id}','${g.nama.replace(/'/g,"\\'")}',${g.totalHonor})"><i class="fas fa-money-bill-wave me-1"></i>Tandai Lunas</button>`;
+      }
       html += `<tr>
         <td><span class="siswa-id-badge">${g.id}</span></td>
         <td><strong>${g.nama}</strong></td>
         <td class="text-center fw-bold">${g.totalSesi}</td>
         <td class="fw-bold text-success">Rp ${g.totalHonor.toLocaleString('id-ID')}</td>
+        <td class="text-center">${statusHtml}</td>
+        <td class="text-center">${btnHtml}</td>
       </tr>`;
     });
   }
   document.getElementById('tabelRekapHonorBody').innerHTML = html;
   document.getElementById('totalHonorBulanan').innerText   = 'Rp ' + totalKeseluruhan.toLocaleString('id-ID');
+}
+
+function tandaiHonorBayar(idGuru, namaGuru, totalHonor) {
+  let bulan = parseInt(document.getElementById('rekapBulan').value);
+  let tahun = parseInt(document.getElementById('rekapTahun').value);
+  let periode = namaBulanArr[bulan-1] + ' ' + tahun;
+  if (!confirm('Tandai honor ' + namaGuru + ' (Rp ' + Number(totalHonor).toLocaleString('id-ID') + ') untuk ' + periode + ' sebagai LUNAS?')) return;
+  tampilkanLoading('Memproses...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      tampilkanToast(res, res.includes('\u2705')?'success':'warning');
+      loadRekapHonor();
+    })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c ' + err.message, 'error'); })
+    .tandaiHonorDibayar({ idGuru: idGuru, namaGuru: namaGuru, bulan: bulan, tahun: tahun, totalHonor: totalHonor });
+}
+
+function batalkanHonorBayar(idGuru, namaGuru) {
+  let bulan = parseInt(document.getElementById('rekapBulan').value);
+  let tahun = parseInt(document.getElementById('rekapTahun').value);
+  if (!confirm('Batalkan status LUNAS untuk ' + namaGuru + '?')) return;
+  tampilkanLoading('Memproses...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      tampilkanToast(res, res.includes('\u2705')?'success':'warning');
+      loadRekapHonor();
+    })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c ' + err.message, 'error'); })
+    .batalkanHonorDibayar(idGuru, bulan, tahun);
+}
+
+// ==========================================
+// REKAP ABSENSI BULANAN
+// ==========================================
+function initRekapAbsensi() {
+  let now = new Date();
+  document.getElementById('absBulan').value = now.getMonth() + 1;
+  document.getElementById('absTahun').value = now.getFullYear();
+  // Populate filter rombel dari rawKelas
+  let sel = document.getElementById('absFilterRombel');
+  let opts = '<option value="">Semua Rombel</option>';
+  [...rawKelas]
+    .sort((a,b) => { let na=parseInt(a.tingkat),nb=parseInt(b.tingkat); return (!isNaN(na)&&!isNaN(nb))?na-nb:(a.rombel||'').localeCompare(b.rombel||''); })
+    .forEach(k => { opts += `<option value="${k.rombel}">${k.rombel}</option>`; });
+  sel.innerHTML = opts;
+}
+
+function loadRekapAbsensi() {
+  let bulan  = document.getElementById('absBulan').value;
+  let tahun  = document.getElementById('absTahun').value;
+  let rombel = document.getElementById('absFilterRombel').value;
+  if (!bulan || !tahun) { tampilkanToast('Pilih bulan dan tahun!', 'warning'); return; }
+  tampilkanLoading('Menghitung rekap absensi...');
+  google.script.run
+    .withSuccessHandler(rekap => { sembunyikanLoading(); renderRekapAbsensi(rekap, bulan, tahun); })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c Error: ' + err.message, 'error'); })
+    .getRekapAbsensi(parseInt(bulan), parseInt(tahun), rombel || '');
+}
+
+function renderRekapAbsensi(rekap, bulan, tahun) {
+  let periodeStr = namaBulanArr[parseInt(bulan)-1] + ' ' + tahun;
+  let html = '';
+  let totals = { sesi: 0, hadir: 0, izin: 0, sakit: 0, alpha: 0 };
+
+  if (!rekap || rekap.length === 0) {
+    html = `<tr><td colspan="9" class="text-center text-muted py-4">Tidak ada data absensi untuk ${periodeStr}</td></tr>`;
+    document.getElementById('ringkasanRekapAbsensi').innerText = '-';
+  } else {
+    rekap.forEach(s => {
+      totals.sesi  += s.totalSesi;
+      totals.hadir += s.hadir;
+      totals.izin  += s.izin;
+      totals.sakit += s.sakit;
+      totals.alpha += s.alpha;
+      let warna = s.persenHadir >= 80 ? 'text-success'
+                : s.persenHadir >= 60 ? 'text-warning'
+                : 'text-danger';
+      html += `<tr>
+        <td><span class="siswa-id-badge">${s.idSiswa}</span></td>
+        <td><strong>${s.namaSiswa}</strong></td>
+        <td>${s.kelas || '-'}</td>
+        <td class="text-center fw-bold">${s.totalSesi}</td>
+        <td class="text-center fw-bold text-success">${s.hadir}</td>
+        <td class="text-center text-info">${s.izin}</td>
+        <td class="text-center text-warning">${s.sakit}</td>
+        <td class="text-center text-danger">${s.alpha}</td>
+        <td class="text-center fw-bold ${warna}">${s.persenHadir}%</td>
+      </tr>`;
+    });
+    let persenRata = totals.sesi > 0 ? Math.round((totals.hadir / totals.sesi) * 100) : 0;
+    document.getElementById('ringkasanRekapAbsensi').innerHTML =
+      `<span class="text-muted">${periodeStr}</span> &middot; ` +
+      `${rekap.length} siswa &middot; ${totals.sesi} sesi &middot; ` +
+      `<span class="text-success">Hadir ${totals.hadir}</span> &middot; ` +
+      `<span class="text-info">Izin ${totals.izin}</span> &middot; ` +
+      `<span class="text-warning">Sakit ${totals.sakit}</span> &middot; ` +
+      `<span class="text-danger">Alpha ${totals.alpha}</span> &middot; ` +
+      `Rata-rata <strong>${persenRata}%</strong>`;
+  }
+  document.getElementById('tabelRekapAbsensiBody').innerHTML = html;
 }
 
 // ==========================================
@@ -1885,12 +2068,13 @@ let bsModalMasterKelas = null;
 
 function renderTabelKelas() {
   let html = '';
-  // Sort by jenjang lalu tingkat
+  // Sort by tingkat (numerik 1-12), lalu jenjang, lalu rombel
   let sorted = [...rawKelas].sort((a,b) => {
-    if (a.jenjang !== b.jenjang) return a.jenjang.localeCompare(b.jenjang);
     let na = parseInt(a.tingkat), nb = parseInt(b.tingkat);
-    if (!isNaN(na) && !isNaN(nb)) return na - nb;
-    return (a.tingkat||'').localeCompare(b.tingkat||'');
+    if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+    if (a.tingkat !== b.tingkat) return (a.tingkat||'').localeCompare(b.tingkat||'');
+    if (a.jenjang !== b.jenjang) return a.jenjang.localeCompare(b.jenjang);
+    return (a.rombel||'').localeCompare(b.rombel||'');
   });
   sorted.forEach(k => {
     html += `<tr>
@@ -1899,6 +2083,7 @@ function renderTabelKelas() {
       <td><strong>${k.rombel}</strong></td>
       <td class="text-center">
         <div class="d-flex gap-1 justify-content-center flex-wrap">
+          <button class="btn btn-sm btn-outline-secondary py-0" onclick="bukaModalLihatIsiRombel('${k.rombel.replace(/'/g,"\\'")}')"><i class="fas fa-users me-1"></i>Lihat Isi</button>
           <button class="btn btn-sm btn-outline-info py-0" onclick="bukaModalIsiSiswa('${k.rombel.replace(/'/g,"\\'")}')"><i class="fas fa-user-plus me-1"></i>Isi Siswa</button>
           <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditKelas(${k.rowIndex})"><i class="fas fa-edit me-1"></i>Edit</button>
           <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusKelas(${k.rowIndex},'${k.rombel.replace(/'/g,"\\'")}')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
@@ -1981,6 +2166,46 @@ function konfirmasiHapusKelas(rowIndex, label) {
     })
     .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c Error: ' + err.message, 'error'); })
     .hapusKelas(rowIndex);
+}
+
+// ==========================================
+// LIHAT ISI ROMBEL (read-only)
+// ==========================================
+let bsModalLihatIsi = null;
+let lihatIsiRombelSaatIni = '';
+
+function bukaModalLihatIsiRombel(rombel) {
+  lihatIsiRombelSaatIni = rombel;
+  document.getElementById('lihatIsiNamaRombel').innerText = rombel;
+  document.getElementById('lihatIsiCari').value = '';
+  renderLihatIsiRombel();
+  if (!bsModalLihatIsi) bsModalLihatIsi = new bootstrap.Modal(document.getElementById('modalLihatIsiRombel'));
+  bsModalLihatIsi.show();
+}
+
+function renderLihatIsiRombel() {
+  let cari = document.getElementById('lihatIsiCari').value.trim().toLowerCase();
+  let list = rawSiswa.filter(s => (s.kelas||'').toLowerCase() === lihatIsiRombelSaatIni.toLowerCase());
+  let total = list.length;
+  let aktif = list.filter(s => s.status === 'Aktif').length;
+  if (cari) {
+    list = list.filter(s => s.nama.toLowerCase().includes(cari) || s.id.toLowerCase().includes(cari));
+  }
+  let html = '';
+  list.forEach(s => {
+    let badgeStatus = s.status === 'Aktif'
+      ? '<span class="badge bg-success">Aktif</span>'
+      : '<span class="badge bg-secondary">' + s.status + '</span>';
+    html += `<tr>
+      <td class="text-muted small">${s.id}</td>
+      <td class="fw-bold">${s.nama}</td>
+      <td>${badgeStatus}</td>
+      <td class="small">${s.tipe || '-'}</td>
+    </tr>`;
+  });
+  document.getElementById('tabelLihatIsiBody').innerHTML = html;
+  document.getElementById('lihatIsiEmpty').classList.toggle('d-none', total > 0);
+  document.getElementById('lihatIsiCount').innerText = aktif + ' aktif / ' + total + ' total';
 }
 
 // ==========================================
@@ -2495,9 +2720,8 @@ function siapkanEditSchedule(rowIndex) {
   document.getElementById('txtJudulFormSchedule').innerText = 'Edit Jadwal (' + s.mapel + ' \u00b7 ' + s.kelas + ')';
   document.getElementById('btnSimpanSchedule').innerText = 'Update Jadwal';
   document.getElementById('btnSimpanSchedule').className = 'btn btn-warning w-100 fw-bold py-2';
-  // Tampilkan tombol Hapus & Absensi hanya di edit mode
+  // Tampilkan tombol Hapus hanya di edit mode
   document.getElementById('btnHapusSchedule').classList.remove('d-none');
-  document.getElementById('btnAbsensiSchedule').classList.remove('d-none');
   autoFillHonorSesi();
   initModalSchedule();
   bsModalSchedule.show();
@@ -2511,11 +2735,9 @@ function resetFormScheduleKeDefault() {
   document.getElementById('txtJudulFormSchedule').innerText = 'Tambah Jadwal';
   document.getElementById('btnSimpanSchedule').innerText = 'Simpan Jadwal';
   document.getElementById('btnSimpanSchedule').className = 'btn btn-success w-100 fw-bold py-2';
-  // Sembunyikan tombol Hapus & Absensi (hanya muncul saat edit)
+  // Sembunyikan tombol Hapus (hanya muncul saat edit)
   let btnHapus = document.getElementById('btnHapusSchedule');
   if (btnHapus) btnHapus.classList.add('d-none');
-  let btnAbs = document.getElementById('btnAbsensiSchedule');
-  if (btnAbs) btnAbs.classList.add('d-none');
 }
 
 // Handler: konfirmasi & hapus jadwal dari modal Edit Schedule
@@ -2577,40 +2799,31 @@ function initModalAbsensi() {
   if (!bsModalAbsensi) bsModalAbsensi = new bootstrap.Modal(document.getElementById('modalAbsensi'));
 }
 
-// Dipanggil dari tombol "Absensi" di modal Edit Schedule
-function bukaModalAbsensiDariSchedule() {
-  let rowIndex = document.getElementById('sRowIndexHidden').value;
-  if (!rowIndex) { tampilkanToast('Tidak ada jadwal terpilih', 'warning'); return; }
-  let s = rawSchedule.find(x => x.rowIndex === parseInt(rowIndex));
-  if (!s) { tampilkanToast('Data jadwal tidak ditemukan', 'warning'); return; }
+// Entry point baru: dipanggil dari list jadwal guru di tab Isi Absensi
+function bukaModalIsiAbsensi(s) {
+  if (!s) { tampilkanToast('Data jadwal kosong', 'warning'); return; }
 
-  // Ambil siswa aktif di rombel ini
   let rombel = s.kelas;
   let siswaRombel = rawSiswa.filter(x => (x.kelas||'').toLowerCase() === rombel.toLowerCase() && x.status === 'Aktif');
-
-  // Sesi info (tanggal bisa ISO atau "YYYY-MM-DD")
   let tglStr = (s.tgl||'').split('T')[0];
 
   absensiSesiSaatIni = {
-    tanggal : tglStr,
-    rombel  : rombel,
-    mapel   : s.mapel,
-    jamMulai: s.jamMulai,
-    idGuru  : s.idGuru,
-    namaGuru: s.namaGuru,
+    tanggal : tglStr, rombel: rombel, mapel: s.mapel,
+    jamMulai: s.jamMulai, idGuru: s.idGuru, namaGuru: s.namaGuru,
     siswaList: siswaRombel
   };
 
-  // Update header info
   document.getElementById('absensiSesiInfo').innerHTML =
     '<strong>' + s.mapel + '</strong> \u00b7 ' + rombel +
     ' \u00b7 ' + tglStr + ' \u00b7 ' + s.jamMulai +
     ' \u00b7 Guru: ' + (s.namaGuru || '-');
-
-  // Counter
   document.getElementById('absensiCounter').innerText = siswaRombel.length + ' siswa';
 
-  // Empty state
+  // Reset materi + nilai toggle
+  document.getElementById('absMateri').value = '';
+  document.getElementById('absToggleNilai').checked = false;
+  toggleNilaiAbsensi();
+
   let emptyEl = document.getElementById('absensiEmptyState');
   let wrapEl  = document.getElementById('absensiTableWrap');
   let btnSimpan = document.getElementById('btnSimpanAbsensi');
@@ -2627,21 +2840,29 @@ function bukaModalAbsensiDariSchedule() {
   wrapEl.classList.remove('d-none');
   btnSimpan.disabled = false;
 
-  // Render rows dulu (default semua Hadir), lalu load existing dari backend
   renderAbsensiRows(siswaRombel, {});
   initModalAbsensi();
   bsModalAbsensi.show();
 
-  // Load existing absensi (kalau sesi ini sudah pernah diabsen)
+  // Load existing absensi
   tampilkanLoading('Memuat absensi sebelumnya...');
   google.script.run
-    .withSuccessHandler(existing => {
+    .withSuccessHandler(res => {
       sembunyikanLoading();
-      if (existing && existing.length > 0) {
+      if (!res) return;
+      let entries = res.entries || [];
+      let materi = res.materi || '';
+      let adaNilai = !!res.adaNilai;
+      if (materi) document.getElementById('absMateri').value = materi;
+      if (adaNilai) {
+        document.getElementById('absToggleNilai').checked = true;
+        toggleNilaiAbsensi();
+      }
+      if (entries.length > 0) {
         let map = {};
-        existing.forEach(e => { map[e.idSiswa] = e; });
+        entries.forEach(e => { map[e.idSiswa] = e; });
         renderAbsensiRows(siswaRombel, map);
-        tampilkanToast('\u2139\ufe0f Memuat ' + existing.length + ' data absensi yang sudah ada', 'info');
+        tampilkanToast('\u2139\ufe0f Memuat ' + entries.length + ' data absensi yang sudah ada', 'info');
       }
     })
     .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u26a0\ufe0f ' + err.message, 'warning'); })
@@ -2650,20 +2871,29 @@ function bukaModalAbsensiDariSchedule() {
 
 function renderAbsensiRows(siswaList, existingMap) {
   let opts = ['Hadir','Izin','Sakit','Alpha'];
+  let nilaiVisible = document.getElementById('absToggleNilai').checked;
   let html = '';
   siswaList.forEach(siswa => {
-    let existing = existingMap[siswa.id] || { status: 'Hadir', catatan: '' };
+    let existing = existingMap[siswa.id] || { status: 'Hadir', catatan: '', nilai: '' };
     let selectOpts = opts.map(o => `<option value="${o}" ${o===existing.status?'selected':''}>${o}</option>`).join('');
+    let nilaiVal = (existing.nilai !== '' && existing.nilai !== null && existing.nilai !== undefined) ? existing.nilai : '';
     html += `<tr data-id="${siswa.id}">
       <td><div class="fw-bold">${siswa.nama}</div><div class="text-muted small">${siswa.id}</div></td>
       <td><select class="form-select form-select-sm absensi-status" onchange="onAbsensiStatusChange(this)">${selectOpts}</select></td>
       <td><input type="text" class="form-control form-control-sm absensi-catatan" placeholder="Telat 10 mnt, dll" value="${(existing.catatan||'').replace(/"/g,'&quot;')}"></td>
+      <td class="col-nilai ${nilaiVisible?'':'d-none'}"><input type="number" min="0" max="100" class="form-control form-control-sm absensi-nilai" placeholder="0-100" value="${nilaiVal}"></td>
     </tr>`;
   });
   let tbody = document.getElementById('tabelAbsensiBody');
   tbody.innerHTML = html;
-  // Apply color hint ke semua select awal
   tbody.querySelectorAll('.absensi-status').forEach(s => applyAbsensiStatusColor(s));
+}
+
+function toggleNilaiAbsensi() {
+  let on = document.getElementById('absToggleNilai').checked;
+  document.querySelectorAll('#tabelAbsensiBody .col-nilai, #modalAbsensi .col-nilai').forEach(el => {
+    el.classList.toggle('d-none', !on);
+  });
 }
 
 function applyAbsensiStatusColor(selectEl) {
@@ -2690,6 +2920,7 @@ function submitAbsensi() {
   let rows = document.querySelectorAll('#tabelAbsensiBody tr');
   if (rows.length === 0) { tampilkanToast('\u26a0\ufe0f Tidak ada siswa', 'warning'); return; }
 
+  let materi = document.getElementById('absMateri').value.trim();
   let entries = [];
   rows.forEach(tr => {
     let idSiswa = tr.getAttribute('data-id');
@@ -2697,7 +2928,9 @@ function submitAbsensi() {
     if (!siswa) return;
     let status = tr.querySelector('.absensi-status').value;
     let catatan = tr.querySelector('.absensi-catatan').value.trim();
-    entries.push({ idSiswa: siswa.id, namaSiswa: siswa.nama, status: status, catatan: catatan });
+    let nilaiEl = tr.querySelector('.absensi-nilai');
+    let nilai = (nilaiEl && nilaiEl.value !== '') ? Number(nilaiEl.value) : '';
+    entries.push({ idSiswa: siswa.id, namaSiswa: siswa.nama, status: status, catatan: catatan, nilai: nilai });
   });
 
   let payload = {
@@ -2707,6 +2940,7 @@ function submitAbsensi() {
     jamMulai: absensiSesiSaatIni.jamMulai,
     idGuru  : absensiSesiSaatIni.idGuru,
     namaGuru: absensiSesiSaatIni.namaGuru,
+    materi  : materi,
     entries : entries
   };
 
@@ -2718,7 +2952,11 @@ function submitAbsensi() {
       setTombolLoading('btnSimpanAbsensi', false, '', '<i class="fas fa-save me-1"></i>Simpan Absensi', 'btn btn-info text-white w-100 fw-bold py-2');
       let tipe = res.includes('\u2705') ? 'success' : 'warning';
       tampilkanToast(res, tipe);
-      if (tipe === 'success') bsModalAbsensi.hide();
+      if (tipe === 'success') {
+        bsModalAbsensi.hide();
+        // Refresh list jadwal guru kalau modal ini dibuka dari sana
+        if (document.getElementById('isiAbsGuru') && document.getElementById('isiAbsGuru').value) loadJadwalGuru();
+      }
     })
     .withFailureHandler(err => {
       sembunyikanLoading();
@@ -2726,6 +2964,84 @@ function submitAbsensi() {
       tampilkanToast('\u274c Error: ' + err.message, 'error');
     })
     .simpanAbsensi(payload);
+}
+
+// ==========================================
+// ISI ABSENSI TAB — guru picker + list jadwal
+// ==========================================
+function initIsiAbsensi() {
+  let now = new Date();
+  let bulanEl = document.getElementById('isiAbsBulan');
+  let tahunEl = document.getElementById('isiAbsTahun');
+  if (!bulanEl.value) bulanEl.value = now.getMonth() + 1;
+  if (!tahunEl.value) tahunEl.value = now.getFullYear();
+
+  // Populate guru dropdown dari rawSchedule (distinct guru) — atau dari Guru data kalau ada
+  let sel = document.getElementById('isiAbsGuru');
+  if (!sel) return;
+  let opts = '<option value="">-- Pilih Guru --</option>';
+  let seen = {};
+  (rawSchedule||[]).forEach(s => {
+    if (s.idGuru && !seen[s.idGuru]) {
+      seen[s.idGuru] = true;
+      opts += `<option value="${s.idGuru}">${s.namaGuru} (${s.idGuru})</option>`;
+    }
+  });
+  let currVal = sel.value;
+  sel.innerHTML = opts;
+  if (currVal) sel.value = currVal;
+}
+
+function loadJadwalGuru() {
+  let idGuru = document.getElementById('isiAbsGuru').value;
+  let bulan  = parseInt(document.getElementById('isiAbsBulan').value);
+  let tahun  = parseInt(document.getElementById('isiAbsTahun').value);
+  let tbody = document.getElementById('tabelJadwalGuruBody');
+  if (!idGuru) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Pilih guru &amp; bulan untuk lihat jadwal</td></tr>';
+    return;
+  }
+  // Filter rawSchedule by guru + bulan + tahun
+  let list = (rawSchedule||[]).filter(s => {
+    if ((s.idGuru||'') !== idGuru) return false;
+    if (!s.tgl) return false;
+    let d = new Date(s.tgl);
+    if (isNaN(d.getTime())) return false;
+    return (d.getMonth()+1) === bulan && d.getFullYear() === tahun;
+  }).sort((a,b) => {
+    let da = new Date(a.tgl), db = new Date(b.tgl);
+    if (da - db !== 0) return da - db;
+    return (a.jamMulai||'').localeCompare(b.jamMulai||'');
+  });
+
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Tidak ada jadwal untuk periode ini</td></tr>';
+    return;
+  }
+
+  // Tampilkan dulu tanpa status, lalu fetch status absensi
+  tbody.innerHTML = list.map(s => {
+    let tglStr = (s.tgl||'').split('T')[0];
+    return `<tr><td>${tglStr}</td><td>${s.jamMulai}</td><td><strong>${s.kelas}</strong></td><td>${s.mapel}</td><td class="text-center" data-status-cell="${tglStr}|${s.kelas.toLowerCase()}|${s.jamMulai}"><span class="badge bg-secondary">memuat...</span></td><td class="text-center"><button class="btn btn-sm btn-info text-white fw-bold" onclick='bukaModalIsiAbsensi(${JSON.stringify(s).replace(/'/g,"&#39;")})'><i class="fas fa-edit me-1"></i>Isi/Edit</button></td></tr>`;
+  }).join('');
+
+  // Fetch status bulk
+  google.script.run
+    .withSuccessHandler(statusMap => {
+      document.querySelectorAll('[data-status-cell]').forEach(td => {
+        let key = td.getAttribute('data-status-cell');
+        let st = statusMap[key];
+        if (st && st.jumlahTotal > 0) {
+          td.innerHTML = `<span class="badge bg-success">Sudah (${st.jumlahHadir}/${st.jumlahTotal} hadir)</span>`;
+        } else {
+          td.innerHTML = `<span class="badge bg-warning text-dark">Belum diabsen</span>`;
+        }
+      });
+    })
+    .withFailureHandler(err => {
+      document.querySelectorAll('[data-status-cell]').forEach(td => { td.innerHTML = '<span class="badge bg-secondary">?</span>'; });
+    })
+    .getStatusAbsensiBulkSesi(idGuru, bulan, tahun);
 }
 
 function autoFillHonorSesi() {

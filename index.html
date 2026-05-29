@@ -62,6 +62,8 @@
     <a href="#" onclick="switchViewMobile('schedule')" id="nav-schedule"><i class="fas fa-calendar-alt"></i> <span>Schedule</span></a>
     <div class="sidebar-category-title">Master Data</div>
     <div class="sidebar-divider"></div>
+    <a href="#" onclick="switchViewMobile('absensi')" id="nav-absensi"><i class="fas fa-clipboard-check"></i> <span>Absensi</span></a>
+    <a href="#" onclick="switchViewMobile('rekap-honor')" id="nav-rekap-honor"><i class="fas fa-money-check-alt"></i> <span>Rekap Honor</span></a>
     <a href="#" onclick="switchViewMobile('data-mapel')" id="nav-data-mapel"><i class="fas fa-book-open"></i> <span>Mata Pelajaran</span></a>
     <a href="#" onclick="switchViewMobile('data-kelas')" id="nav-data-kelas"><i class="fas fa-layer-group"></i> <span>Data Kelas</span></a>
     <a href="#" onclick="switchViewMobile('data-ruangan')" id="nav-data-ruangan"><i class="fas fa-door-open"></i> <span>Data Ruangan</span></a>
@@ -282,14 +284,7 @@
 
     <!-- ===== SECTION: HONOR GURU ===== -->
     <div id="section-schedule" class="view-section">
-      <ul class="nav nav-tabs mb-0" role="tablist" style="border-bottom:2px solid #e2e8f0;">
-        <li class="nav-item"><button class="nav-link active fw-bold border-0" data-bs-toggle="tab" data-bs-target="#panel-jadwal" type="button" style="padding:12px 15px;font-size:13px;"><i class="fas fa-calendar-alt me-1"></i>Kalender</button></li>
-        <li class="nav-item"><button class="nav-link fw-bold border-0" data-bs-toggle="tab" data-bs-target="#panel-rekap-honor" type="button" onclick="initRekapHonor()" style="padding:12px 15px;font-size:13px;"><i class="fas fa-calculator me-1"></i>Rekap Honor Bulanan</button></li>
-      </ul>
-      <div class="tab-content">
 
-        <!-- ── Tab: Kalender ── -->
-        <div class="tab-pane fade show active" id="panel-jadwal">
           <!-- Toolbar -->
           <div class="bento-card mb-0" style="border-radius:0;border-bottom:1px solid #e2e8f0;margin-bottom:0;">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -327,15 +322,68 @@
               <div class="text-center text-muted py-5 small fw-bold">Memuat kalender...</div>
             </div>
           </div>
-        </div>
+    </div>
 
-        <!-- ── Tab: Rekap Honor ── -->
-        <div class="tab-pane fade" id="panel-rekap-honor">
+    <!-- ===== SECTION: REKAP HONOR ===== -->
+    <div id="section-rekap-honor" class="view-section">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h3 class="fw-bold m-0" style="color:#0f172a;letter-spacing:-0.75px;">Rekap Honor Bulanan</h3>
+      </div>
+      <div class="bento-card">
+        <div class="d-flex flex-wrap gap-3 align-items-end">
+          <div>
+            <label class="small fw-bold text-muted mb-1 d-block">Bulan</label>
+            <select class="form-select" id="rekapBulan" style="width:140px;">
+              <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
+              <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+              <option value="7">Juli</option><option value="8">Agustus</option><option value="9">September</option>
+              <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+            </select>
+          </div>
+          <div>
+            <label class="small fw-bold text-muted mb-1 d-block">Tahun</label>
+            <input type="number" class="form-control" id="rekapTahun" style="width:100px;" value="2026" min="2020" max="2099">
+          </div>
+          <button class="btn btn-primary fw-bold px-4" onclick="loadRekapHonor()" style="border-radius:10px;">
+            <i class="fas fa-calculator me-2"></i>Hitung Rekap
+          </button>
+        </div>
+      </div>
+      <div class="bento-card p-2 p-md-4" style="overflow-x:auto;">
+        <table class="table table-sm align-middle small m-0" style="min-width:780px;">
+          <thead class="table-dark"><tr><th>ID Guru</th><th>Nama Guru</th><th class="text-center">Total Sesi</th><th>Total Honor</th><th class="text-center">Status</th><th class="text-center">Aksi</th></tr></thead>
+          <tbody id="tabelRekapHonorBody">
+            <tr><td colspan="6" class="text-center text-muted py-4">Pilih bulan &amp; tahun, lalu klik Hitung Rekap</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="bento-card d-flex justify-content-between align-items-center px-4 py-3" style="margin-top:-24px;border-radius:0 0 16px 16px;border-top:1px solid #e2e8f0;">
+        <span class="fw-bold text-muted text-uppercase small" style="letter-spacing:0.8px;">Total Honor Bulan Ini</span>
+        <span class="fw-bold text-success" style="font-size:20px;letter-spacing:-0.5px;" id="totalHonorBulanan">Rp 0</span>
+      </div>
+    </div>
+
+    <!-- ===== SECTION: ABSENSI ===== -->
+    <div id="section-absensi" class="view-section">
+      <ul class="nav nav-tabs mb-0" role="tablist" style="border-bottom:2px solid #e2e8f0;">
+        <li class="nav-item"><button class="nav-link active fw-bold border-0" data-bs-toggle="tab" data-bs-target="#panel-isi-absensi" type="button" onclick="initIsiAbsensi()" style="padding:12px 15px;font-size:13px;"><i class="fas fa-edit me-1"></i>Isi Absensi</button></li>
+        <li class="nav-item"><button class="nav-link fw-bold border-0" data-bs-toggle="tab" data-bs-target="#panel-rekap-absensi" type="button" onclick="initRekapAbsensi()" style="padding:12px 15px;font-size:13px;"><i class="fas fa-clipboard-list me-1"></i>Rekap Absensi</button></li>
+      </ul>
+      <div class="tab-content">
+
+        <!-- ── Tab: Isi Absensi ── -->
+        <div class="tab-pane fade show active" id="panel-isi-absensi">
           <div class="bento-card">
             <div class="d-flex flex-wrap gap-3 align-items-end">
+              <div style="min-width:220px;">
+                <label class="small fw-bold text-muted mb-1 d-block">Pilih Guru</label>
+                <select class="form-select" id="isiAbsGuru" onchange="loadJadwalGuru()">
+                  <option value="">-- Pilih Guru --</option>
+                </select>
+              </div>
               <div>
                 <label class="small fw-bold text-muted mb-1 d-block">Bulan</label>
-                <select class="form-select" id="rekapBulan" style="width:140px;">
+                <select class="form-select" id="isiAbsBulan" onchange="loadJadwalGuru()" style="width:140px;">
                   <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
                   <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
                   <option value="7">Juli</option><option value="8">Agustus</option><option value="9">September</option>
@@ -344,24 +392,69 @@
               </div>
               <div>
                 <label class="small fw-bold text-muted mb-1 d-block">Tahun</label>
-                <input type="number" class="form-control" id="rekapTahun" style="width:100px;" value="2026" min="2020" max="2099">
+                <input type="number" class="form-control" id="isiAbsTahun" onchange="loadJadwalGuru()" style="width:100px;" value="2026" min="2020" max="2099">
               </div>
-              <button class="btn btn-primary fw-bold px-4" onclick="loadRekapHonor()" style="border-radius:10px;">
-                <i class="fas fa-calculator me-2"></i>Hitung Rekap
-              </button>
             </div>
           </div>
           <div class="bento-card p-2 p-md-4" style="overflow-x:auto;">
-            <table class="table table-sm align-middle small m-0" style="min-width:600px;">
-              <thead class="table-dark"><tr><th>ID Guru</th><th>Nama Guru</th><th class="text-center">Total Sesi</th><th>Total Honor</th></tr></thead>
-              <tbody id="tabelRekapHonorBody">
-                <tr><td colspan="4" class="text-center text-muted py-4">Pilih bulan &amp; tahun, lalu klik Hitung Rekap</td></tr>
+            <table class="table table-sm align-middle small m-0" style="min-width:780px;">
+              <thead class="table-dark"><tr><th>Tanggal</th><th>Jam</th><th>Rombel</th><th>Mapel</th><th class="text-center">Status</th><th class="text-center">Aksi</th></tr></thead>
+              <tbody id="tabelJadwalGuruBody">
+                <tr><td colspan="6" class="text-center text-muted py-4">Pilih guru &amp; bulan untuk lihat jadwal</td></tr>
               </tbody>
             </table>
           </div>
-          <div class="bento-card d-flex justify-content-between align-items-center px-4 py-3" style="margin-top:-24px;border-radius:0 0 16px 16px;border-top:1px solid #e2e8f0;">
-            <span class="fw-bold text-muted text-uppercase small" style="letter-spacing:0.8px;">Total Honor Bulan Ini</span>
-            <span class="fw-bold text-success" style="font-size:20px;letter-spacing:-0.5px;" id="totalHonorBulanan">Rp 0</span>
+        </div>
+
+        <!-- ── Tab: Rekap Absensi ── -->
+        <div class="tab-pane fade" id="panel-rekap-absensi">
+          <div class="bento-card">
+            <div class="d-flex flex-wrap gap-3 align-items-end">
+              <div>
+                <label class="small fw-bold text-muted mb-1 d-block">Bulan</label>
+                <select class="form-select" id="absBulan" style="width:140px;">
+                  <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
+                  <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+                  <option value="7">Juli</option><option value="8">Agustus</option><option value="9">September</option>
+                  <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+                </select>
+              </div>
+              <div>
+                <label class="small fw-bold text-muted mb-1 d-block">Tahun</label>
+                <input type="number" class="form-control" id="absTahun" style="width:100px;" value="2026" min="2020" max="2099">
+              </div>
+              <div>
+                <label class="small fw-bold text-muted mb-1 d-block">Filter Rombel</label>
+                <select class="form-select" id="absFilterRombel" style="width:160px;">
+                  <option value="">Semua Rombel</option>
+                </select>
+              </div>
+              <button class="btn btn-info text-white fw-bold px-4" onclick="loadRekapAbsensi()" style="border-radius:10px;">
+                <i class="fas fa-clipboard-list me-2"></i>Hitung Rekap
+              </button>
+            </div>
+          </div>
+          <div class="bento-card mt-3" style="overflow-x:auto;">
+            <table class="table table-sm align-middle small m-0" style="min-width:680px;">
+              <thead class="table-dark">
+                <tr>
+                  <th>ID Siswa</th><th>Nama</th><th>Rombel</th>
+                  <th class="text-center">Total Sesi</th>
+                  <th class="text-center text-success">Hadir</th>
+                  <th class="text-center text-info">Izin</th>
+                  <th class="text-center text-warning">Sakit</th>
+                  <th class="text-center text-danger">Alpha</th>
+                  <th class="text-center">% Hadir</th>
+                </tr>
+              </thead>
+              <tbody id="tabelRekapAbsensiBody">
+                <tr><td colspan="9" class="text-center text-muted py-4">Pilih bulan &amp; tahun, lalu klik Hitung Rekap</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="bento-card d-flex justify-content-between align-items-center px-4 py-3 mt-0" style="margin-top:-24px;border-radius:0 0 16px 16px;border-top:1px solid #e2e8f0;">
+            <span class="fw-bold text-muted text-uppercase small" style="letter-spacing:0.8px;">Ringkasan Bulan Ini</span>
+            <span class="fw-bold" style="font-size:14px;letter-spacing:-0.3px;" id="ringkasanRekapAbsensi">-</span>
           </div>
         </div>
 
@@ -636,7 +729,7 @@
             <div class="d-flex gap-2 mt-2">
               <button type="button" class="btn btn-light fw-bold py-2 px-3" data-bs-dismiss="modal" onclick="resetFormScheduleKeDefault()" style="border-radius:10px;">Batal</button>
               <button type="button" id="btnHapusSchedule" class="btn btn-danger fw-bold py-2 px-3 d-none" onclick="konfirmasiHapusScheduleDariModal()" style="border-radius:10px;"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
-              <button type="button" id="btnAbsensiSchedule" class="btn btn-info fw-bold py-2 px-3 d-none text-white" onclick="bukaModalAbsensiDariSchedule()" style="border-radius:10px;"><i class="fas fa-clipboard-check me-1"></i>Absensi</button>
+              
               <button type="button" onclick="submitSchedule()" id="btnSimpanSchedule" class="btn btn-success w-100 fw-bold py-2" style="border-radius:10px;">Simpan Jadwal</button>
             </div>
           </form>
@@ -803,14 +896,22 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body p-4">
-          <div class="d-flex gap-2 mb-3 flex-wrap">
+          <div class="mb-3">
+            <label class="small fw-bold text-muted mb-1 d-block">Materi yang disampaikan</label>
+            <textarea class="form-control" id="absMateri" rows="2" placeholder="Bab/topik/materi yang diajarkan hari ini..."></textarea>
+          </div>
+          <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="absToggleNilai" onchange="toggleNilaiAbsensi()">
+              <label class="form-check-label small fw-bold" for="absToggleNilai">Ada nilai tes</label>
+            </div>
             <button type="button" class="btn btn-sm btn-outline-success fw-bold" onclick="setSemuaAbsensi('Hadir')"><i class="fas fa-check me-1"></i>Semua Hadir</button>
             <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" onclick="setSemuaAbsensi('Alpha')"><i class="fas fa-times me-1"></i>Reset Alpha</button>
-            <span class="ms-auto small text-muted align-self-center"><span id="absensiCounter">0 siswa</span></span>
+            <span class="ms-auto small text-muted"><span id="absensiCounter">0 siswa</span></span>
           </div>
           <div id="absensiTableWrap" style="overflow-x:auto;">
             <table class="table table-sm align-middle small m-0" style="min-width:520px;">
-              <thead class="table-dark"><tr><th style="width:35%;">Siswa</th><th style="width:30%;">Status</th><th>Catatan (opsional)</th></tr></thead>
+              <thead class="table-dark"><tr><th style="width:30%;">Siswa</th><th style="width:25%;">Status</th><th>Catatan</th><th class="col-nilai d-none" style="width:90px;">Nilai</th></tr></thead>
               <tbody id="tabelAbsensiBody"></tbody>
             </table>
           </div>
@@ -857,6 +958,39 @@
               <button type="button" onclick="submitKelas()" id="btnSimpanKelas" class="btn btn-primary w-100 fw-bold py-2" style="border-radius:10px;">Simpan</button>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: LIHAT ISI ROMBEL (READ-ONLY) ===== -->
+  <div class="modal fade" id="modalLihatIsiRombel" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+      <div class="modal-content" style="border-radius:16px;border:none;box-shadow:0 20px 25px -5px rgb(0 0 0/0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <div>
+            <h5 class="fw-bold text-dark m-0"><i class="fas fa-users me-2 text-secondary"></i>Isi Rombel</h5>
+            <div class="small text-muted mt-1">Rombel: <strong id="lihatIsiNamaRombel" class="text-info"></strong> &middot; <span id="lihatIsiCount" class="badge bg-secondary"></span></div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="mb-3">
+            <input type="text" class="form-control form-control-sm" id="lihatIsiCari" placeholder="Cari nama / ID..." oninput="renderLihatIsiRombel()">
+          </div>
+          <div style="overflow-x:auto;max-height:55vh;overflow-y:auto;">
+            <table class="table table-sm table-striped align-middle small m-0" style="min-width:520px;">
+              <thead class="table-dark sticky-top"><tr><th>ID</th><th>Nama</th><th>Status</th><th>Tipe</th></tr></thead>
+              <tbody id="tabelLihatIsiBody"></tbody>
+            </table>
+          </div>
+          <div id="lihatIsiEmpty" class="text-center text-muted py-4 d-none">
+            <i class="fas fa-user-slash fa-2x mb-2"></i>
+            <div>Belum ada siswa di rombel ini.</div>
+          </div>
+          <div class="d-flex gap-2 mt-4">
+            <button type="button" class="btn btn-light fw-bold py-2 ms-auto px-4" data-bs-dismiss="modal" style="border-radius:10px;">Tutup</button>
+          </div>
         </div>
       </div>
     </div>

@@ -311,3 +311,81 @@ function getRekapHonorBulanan(bulan, tahun) {
   result.sort(function(a, b) { return a.nama.localeCompare(b.nama); });
   return result;
 }
+
+// ==========================================
+// HONOR PEMBAYARAN (status lunas per guru per bulan)
+// Sheet "Honor Pembayaran": IDGuru | NamaGuru | Bulan | Tahun | TotalHonor | TglBayar | Catatan
+// ==========================================
+function ensureSheetHonorBayar_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CONFIG.SHEET_HONOR_BAYAR);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.SHEET_HONOR_BAYAR);
+    sheet.appendRow(['IDGuru','NamaGuru','Bulan','Tahun','TotalHonor','TglBayar','Catatan']);
+  }
+  return sheet;
+}
+
+function getStatusBayarHonor(bulan, tahun) {
+  var sheet = ensureSheetHonorBayar_();
+  var data = sheet.getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    if (parseInt(data[i][2]) !== parseInt(bulan)) continue;
+    if (parseInt(data[i][3]) !== parseInt(tahun)) continue;
+    var tglBayar = data[i][5];
+    var tglStr = '';
+    if (tglBayar instanceof Date) {
+      tglStr = tglBayar.toISOString();
+    } else if (tglBayar) {
+      tglStr = tglBayar.toString();
+    }
+    map[data[i][0].toString().trim()] = {
+      rowIndex  : i + 1,
+      totalHonor: Number(data[i][4]) || 0,
+      tglBayar  : tglStr,
+      catatan   : data[i][6] ? data[i][6].toString() : ''
+    };
+  }
+  return map;
+}
+
+function tandaiHonorDibayar(payload) {
+  if (!payload || !payload.idGuru || !payload.bulan || !payload.tahun)
+    return '\u274c Data tidak lengkap.';
+  var sheet = ensureSheetHonorBayar_();
+  var data = sheet.getDataRange().getValues();
+  // Cek kalau sudah ada record, update; kalau belum, insert
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] && data[i][0].toString().trim() === payload.idGuru.toString().trim()
+        && parseInt(data[i][2]) === parseInt(payload.bulan)
+        && parseInt(data[i][3]) === parseInt(payload.tahun)) {
+      sheet.getRange(i+1, 5).setValue(Number(payload.totalHonor) || 0);
+      sheet.getRange(i+1, 6).setValue(new Date());
+      if (payload.catatan !== undefined) sheet.getRange(i+1, 7).setValue(payload.catatan);
+      return '\u2705 Status pembayaran diperbarui.';
+    }
+  }
+  sheet.appendRow([
+    payload.idGuru, payload.namaGuru || '',
+    parseInt(payload.bulan), parseInt(payload.tahun),
+    Number(payload.totalHonor) || 0, new Date(),
+    payload.catatan || ''
+  ]);
+  return '\u2705 Honor ditandai sudah dibayar.';
+}
+
+function batalkanHonorDibayar(idGuru, bulan, tahun) {
+  var sheet = ensureSheetHonorBayar_();
+  var data = sheet.getDataRange().getValues();
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (data[i][0] && data[i][0].toString().trim() === idGuru.toString().trim()
+        && parseInt(data[i][2]) === parseInt(bulan)
+        && parseInt(data[i][3]) === parseInt(tahun)) {
+      sheet.deleteRow(i + 1);
+      return '\u2705 Status pembayaran dibatalkan.';
+    }
+  }
+  return '\u26a0\ufe0f Record tidak ditemukan.';
+}

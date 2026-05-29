@@ -186,27 +186,30 @@ body.sidebar-is-collapsed { padding-left: var(--sidebar-collapsed-width); }
 .jenjang-row { display: flex; gap: 12px; margin-bottom: 14px; align-items: center; }
 .jenjang-row:last-child { margin-bottom: 0; }
 .jenjang-label { width: 55px; font-weight: 700; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.jenjang-total { font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 2px; letter-spacing: 0; }
 .jenjang-grid { display: flex; gap: 10px; flex-grow: 1; flex-wrap: wrap; }
 .kelas-box {
   flex: 1;
-  min-width: 50px;
+  min-width: 72px;
   text-align: center;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 8px 4px;
+  border-radius: 12px;
+  padding: 10px 6px;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .kelas-box:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08);
-  cursor: pointer;
+  cursor: help;
 }
-.kelas-box.has-student { background: #eff6ff; border-color: #bfdbfe; }
-.kelas-box.has-student .kelas-count { color: #2563eb; font-weight: 700; }
+.kelas-box.has-student { background: linear-gradient(135deg,#eff6ff,#dbeafe); border-color: #93c5fd; }
+.kelas-box.has-student .kelas-count { color: #1d4ed8; }
+.kelas-box.has-student .kelas-sub { color: #2563eb; }
 .kelas-box.has-student:hover { border-color: #3b82f6; }
 .kelas-name { font-size: 11px; font-weight: 600; color: #94a3b8; display: block; line-height: 1.2; }
-.kelas-count { font-size: 16px; font-weight: 700; color: #334155; display: block; margin-top: 2px; }
+.kelas-count { font-size: 22px; font-weight: 800; color: #334155; display: block; margin-top: 4px; line-height: 1; }
+.kelas-sub { font-size: 10px; color: #94a3b8; display: block; margin-top: 3px; font-weight: 600; }
 .form-control, .form-select { font-family: 'Plus Jakarta Sans', sans-serif; }
 .siswa-id-badge {
   font-family: 'Plus Jakarta Sans', sans-serif !important;
