@@ -11,6 +11,17 @@
   <?!= include('Stylesheet'); ?>
 </head>
 <body>
+  <!-- ===== LAYAR AKSES DITOLAK ===== -->
+  <div id="lockedScreen" style="display:none;position:fixed;inset:0;z-index:99999;background:#0f172a;color:#fff;align-items:center;justify-content:center;text-align:center;padding:24px;">
+    <div style="max-width:440px;">
+      <i class="fas fa-lock" style="font-size:48px;color:#f59e0b;margin-bottom:20px;"></i>
+      <h3 class="fw-bold mb-3">Akses Ditolak</h3>
+      <p id="lockedScreenMsg" class="mb-4" style="color:#cbd5e1;line-height:1.6;">Email kamu belum terdaftar untuk mengakses dashboard ini. Hubungi admin/management untuk diberikan akses.</p>
+      <div id="lockedScreenEmail" class="small mb-4" style="color:#94a3b8;"></div>
+      <button class="btn btn-outline-light fw-bold px-4" onclick="location.reload()"><i class="fas fa-sync-alt me-2"></i>Coba Lagi</button>
+    </div>
+  </div>
+
 
   <!-- LOADING OVERLAY -->
   <div class="loading-overlay" id="loadingOverlay">
@@ -48,25 +59,38 @@
       </div>
       <button class="btn-toggle-sidebar" onclick="toggleSidebar()"><i class="fas fa-chevron-left" id="toggleIcon"></i></button>
     </div>
+    <div class="sidebar-nav-scroll">
     <div class="sidebar-category-title">Utama</div>
     <div class="sidebar-divider"></div>
     <a href="#" onclick="switchViewMobile('dashboard')" id="nav-dashboard" class="active"><i class="fas fa-chart-line"></i> <span>Dashboard Overview</span></a>
-    <div class="sidebar-category-title">Database</div>
+    <div class="sidebar-category-title">Aktifitas</div>
+    <div class="sidebar-divider"></div>
+    <a href="#" onclick="switchViewMobile('schedule')" id="nav-schedule"><i class="fas fa-calendar-alt"></i> <span>Schedule</span></a>
+    <a href="#" onclick="switchViewMobile('absensi')" id="nav-absensi"><i class="fas fa-clipboard-check"></i> <span>Absensi</span></a>
+    <div class="sidebar-category-title">Data Master</div>
     <div class="sidebar-divider"></div>
     <a href="#" onclick="switchViewMobile('data-siswa')" id="nav-data-siswa"><i class="fas fa-users"></i> <span>Data Siswa</span></a>
-    <a href="#" onclick="switchViewMobile('data-pembayaran')" id="nav-data-pembayaran"><i class="fas fa-wallet"></i> <span>Data Pembayaran</span></a>
-    <div class="sidebar-category-title">Kepegawaian</div>
-    <div class="sidebar-divider"></div>
     <a href="#" onclick="switchViewMobile('data-guru')" id="nav-data-guru"><i class="fas fa-chalkboard-teacher"></i> <span>Data Guru</span></a>
-    
-    <a href="#" onclick="switchViewMobile('schedule')" id="nav-schedule"><i class="fas fa-calendar-alt"></i> <span>Schedule</span></a>
-    <div class="sidebar-category-title">Master Data</div>
-    <div class="sidebar-divider"></div>
-    <a href="#" onclick="switchViewMobile('absensi')" id="nav-absensi"><i class="fas fa-clipboard-check"></i> <span>Absensi</span></a>
-    <a href="#" onclick="switchViewMobile('rekap-honor')" id="nav-rekap-honor"><i class="fas fa-money-check-alt"></i> <span>Rekap Honor</span></a>
-    <a href="#" onclick="switchViewMobile('data-mapel')" id="nav-data-mapel"><i class="fas fa-book-open"></i> <span>Mata Pelajaran</span></a>
     <a href="#" onclick="switchViewMobile('data-kelas')" id="nav-data-kelas"><i class="fas fa-layer-group"></i> <span>Data Kelas</span></a>
+    <a href="#" onclick="switchViewMobile('data-mapel')" id="nav-data-mapel"><i class="fas fa-book-open"></i> <span>Mata Pelajaran</span></a>
     <a href="#" onclick="switchViewMobile('data-ruangan')" id="nav-data-ruangan"><i class="fas fa-door-open"></i> <span>Data Ruangan</span></a>
+    <div class="sidebar-category-title">Data Pembayaran</div>
+    <div class="sidebar-divider"></div>
+    <a href="#" onclick="switchViewMobile('data-pembayaran')" id="nav-data-pembayaran"><i class="fas fa-wallet"></i> <span>Data Pembayaran</span></a>
+    <a href="#" onclick="switchViewMobile('rekap-honor')" id="nav-rekap-honor"><i class="fas fa-money-check-alt"></i> <span>Rekap Honor</span></a>
+    <div class="sidebar-category-title">Akses</div>
+    <div class="sidebar-divider"></div>
+    <a href="#" onclick="switchViewMobile('manajemen-akses')" id="nav-manajemen-akses" style="display:none;"><i class="fas fa-user-shield"></i> <span>Manajemen Akses</span></a>
+    </div>
+    <div id="sidebarUserInfo" style="padding:14px 12px;border-top:1px solid rgba(148,163,184,0.2);font-size:12px;display:none;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <i class="fas fa-user-circle" style="font-size:22px;color:#94a3b8;"></i>
+        <div style="overflow:hidden;">
+          <div id="userInfoNama" class="fw-bold text-truncate" style="color:#e2e8f0;">-</div>
+          <div id="userInfoRole" class="text-truncate" style="color:#94a3b8;font-size:11px;">-</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- MAIN CONTENT -->
@@ -526,7 +550,75 @@
       </div>
     </div>
 
+    <!-- ===== SECTION: MANAJEMEN AKSES ===== -->
+    <div id="section-manajemen-akses" class="view-section">
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h3 class="fw-bold m-0" style="color:#0f172a;letter-spacing:-0.75px;">Manajemen Akses</h3>
+        <button class="btn btn-primary fw-bold px-3 py-2" onclick="bukaModalTambahAkses()" style="border-radius:10px;">
+          <i class="fas fa-user-plus me-2"></i>Tambah Akses
+        </button>
+      </div>
+      <div class="alert alert-info small mb-3" style="border-radius:10px;">
+        <i class="fas fa-info-circle me-1"></i><strong>Management</strong> = akses penuh. <strong>Staff</strong> = semua kecuali Dashboard. <strong>Guru</strong> = Schedule + Absensi (terkunci ke dirinya). Isi <strong>ID Guru</strong> hanya untuk role guru.
+      </div>
+      <div class="bento-card p-2 p-md-4" style="overflow-x:auto;">
+        <table class="table table-sm table-striped align-middle small m-0" style="min-width:600px;">
+          <thead class="table-dark"><tr><th>Email</th><th>Nama</th><th>Role</th><th>ID Guru</th><th class="text-center">Status</th><th class="text-center">Aksi</th></tr></thead>
+          <tbody id="tabelAksesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div><!-- end main-content -->
+
+  <!-- ===== MODAL: TAMBAH/EDIT AKSES ===== -->
+  <div class="modal fade" id="modalAkses" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="border-radius:16px;border:none;box-shadow:0 20px 25px -5px rgb(0 0 0/0.1);">
+        <div class="modal-header border-0 pb-0 pt-4 px-4">
+          <h5 id="txtJudulFormAkses" class="fw-bold text-dark m-0">Tambah Akses</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="resetFormAkses()"></button>
+        </div>
+        <div class="modal-body p-4">
+          <form id="formAkses" onsubmit="event.preventDefault();">
+            <input type="hidden" id="aRowIndexHidden">
+            <div class="mb-3">
+              <label class="small fw-bold text-muted mb-1">Email Google</label>
+              <input type="email" class="form-control" id="aEmail" placeholder="nama@gmail.com" autocomplete="off" required>
+            </div>
+            <div class="mb-3">
+              <label class="small fw-bold text-muted mb-1">Nama</label>
+              <input type="text" class="form-control" id="aNama" placeholder="Nama lengkap" autocomplete="off">
+            </div>
+            <div class="mb-3">
+              <label class="small fw-bold text-muted mb-1">Role</label>
+              <select class="form-select" id="aRole" onchange="onAksesRoleChange()">
+                <option value="management">Management (akses penuh)</option>
+                <option value="staff">Staff (semua kecuali Dashboard)</option>
+                <option value="guru">Guru (Schedule + Absensi)</option>
+              </select>
+            </div>
+            <div class="mb-3 d-none" id="aGuruWrap">
+              <label class="small fw-bold text-muted mb-1">ID Guru <span class="text-muted">(untuk role guru)</span></label>
+              <input list="aGuruOptions" type="text" class="form-control" id="aIDGuru" placeholder="Ketik / pilih ID guru..." autocomplete="off">
+              <datalist id="aGuruOptions"></datalist>
+            </div>
+            <div class="mb-3">
+              <label class="small fw-bold text-muted mb-1">Status</label>
+              <select class="form-select" id="aStatus">
+                <option value="Aktif">Aktif</option>
+                <option value="Nonaktif">Nonaktif</option>
+              </select>
+            </div>
+            <div class="d-flex gap-2 mt-4">
+              <button type="button" class="btn btn-light w-50 fw-bold py-2" data-bs-dismiss="modal" onclick="resetFormAkses()" style="border-radius:10px;">Batal</button>
+              <button type="button" onclick="submitAkses()" id="btnSimpanAkses" class="btn btn-primary w-100 fw-bold py-2" style="border-radius:10px;">Simpan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ===== MODAL: INPUT PEMBAYARAN ===== -->
   <div class="modal fade" id="modalBayar" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
@@ -570,7 +662,8 @@
             </div>
             <div class="mb-3 d-none" id="wrapperSinglePeriode">
               <label class="small fw-bold text-muted mb-1">Periode Bulan (Edit Mode)</label>
-              <input type="text" class="form-control" id="pSinglePeriode">
+              <input list="pSinglePeriodeOptions" type="text" class="form-control" id="pSinglePeriode" placeholder="Ketik / pilih periode..." autocomplete="off">
+              <datalist id="pSinglePeriodeOptions"></datalist>
             </div>
             <div class="d-flex gap-2 mt-4">
               <button type="button" class="btn btn-light w-50 fw-bold py-2" data-bs-dismiss="modal" onclick="resetFormBayarKeDefault()" style="border-radius: 10px;">Batal</button>
@@ -656,6 +749,7 @@
 
             <!-- Container untuk multiple Mata Pelajaran + Kelas groups -->
             <div id="gMapelGroupsContainer"></div>
+            <datalist id="gMapelOptions"></datalist>
 
             <!-- Tombol Tambah Mata Pelajaran (hanya untuk mode "Guru Baru") -->
             <div id="gAddMapelGroupWrapper" class="mb-3">

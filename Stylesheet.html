@@ -23,12 +23,26 @@ body {
   background: var(--dark-blue);
   color: white;
   padding-top: 25px;
+  padding-bottom: 10px;
   transition: width var(--transition-speed), transform var(--transition-speed);
   overflow: visible;
   white-space: nowrap;
   z-index: 1005;
   border-right: 1px solid #1e293b;
+  display: flex;
+  flex-direction: column;
 }
+/* Area menu yang bisa di-scroll (logo & info user tetap diam) */
+.sidebar-nav-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+.sidebar-nav-scroll::-webkit-scrollbar { width: 6px; }
+.sidebar-nav-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+.sidebar-nav-scroll::-webkit-scrollbar-thumb:hover { background: #475569; }
 .logo-container {
   display: flex;
   align-items: center;

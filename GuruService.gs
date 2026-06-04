@@ -68,6 +68,8 @@ function simpanGuru(payload) {
     sheetGuru = ss.insertSheet(CONFIG.SHEET_GURU);
     sheetGuru.appendRow(["ID Guru","Nama Guru","Mata Pelajaran","Kelas"]);
   }
+  // Paksa kolom Kelas (D) jadi format TEKS supaya "10, 11, 12" tidak diubah jadi tanggal
+  sheetGuru.getRange(1, 4, sheetGuru.getMaxRows(), 1).setNumberFormat('@');
 
   var dataGuru  = sheetGuru.getDataRange().getValues();
   var kelasStr  = payload.kelasArr.join(', ');
@@ -142,6 +144,8 @@ function simpanGuruMultiMapel_(payload) {
     sheetGuru = ss.insertSheet(CONFIG.SHEET_GURU);
     sheetGuru.appendRow(["ID Guru","Nama Guru","Mata Pelajaran","Kelas"]);
   }
+  // Paksa kolom Kelas (D) jadi format TEKS supaya "10, 11, 12" tidak diubah jadi tanggal
+  sheetGuru.getRange(1, 4, sheetGuru.getMaxRows(), 1).setNumberFormat('@');
 
   var dataGuru = sheetGuru.getDataRange().getValues();
   var idGuru   = payload.idGuru ? payload.idGuru.toString().trim() : "";
@@ -214,3 +218,61 @@ function hapusGuru(rowIndex) {
 }
 
 // ==========================================
+
+// ==========================================
+// UPDATE GURU LENGKAP (replace semua mapel guru sekaligus)
+// payload = { idGuru, namaBaru, mapelGroups: [{mapel, kelasArr}] }
+// ==========================================
+function updateGuruLengkap(payload) {
+  if (!payload || !payload.idGuru) return '\u274c ID guru kosong.';
+  if (!payload.mapelGroups || payload.mapelGroups.length === 0)
+    return '\u274c Minimal 1 mata pelajaran.';
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CONFIG.SHEET_GURU);
+  if (!sheet) return '\u274c Sheet guru tidak ditemukan.';
+  // Paksa kolom Kelas (D) jadi teks
+  sheet.getRange(1, 4, sheet.getMaxRows(), 1).setNumberFormat('@');
+
+  var idGuru = payload.idGuru.toString().trim();
+  var data = sheet.getDataRange().getValues();
+
+  // Ambil nama (pakai namaBaru, atau dari row existing)
+  var nama = payload.namaBaru ? payload.namaBaru.toString().trim() : '';
+  if (!nama) {
+    for (var i = 1; i < data.length; i++) {
+      if ((data[i][0]||'').toString().trim() === idGuru) { nama = data[i][1] ? data[i][1].toString() : ''; break; }
+    }
+  }
+
+  // Hapus semua baris guru ini (dari bawah ke atas)
+  for (var i = data.length - 1; i >= 1; i--) {
+    if ((data[i][0]||'').toString().trim() === idGuru) sheet.deleteRow(i + 1);
+  }
+
+  // Insert ulang semua mapel group
+  payload.mapelGroups.forEach(function(g) {
+    sheet.appendRow([idGuru, nama, g.mapel || '', (g.kelasArr || []).join(', ')]);
+  });
+
+  invalidateGuruCache();
+  return '\u2705 Data guru ' + nama + ' berhasil diperbarui.';
+}
+
+// ==========================================
+// HAPUS GURU SECARA KESELURUHAN (semua mapel-nya)
+// ==========================================
+function hapusGuruByID(idGuru) {
+  if (!idGuru) return '\u274c ID guru kosong.';
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CONFIG.SHEET_GURU);
+  if (!sheet) return '\u274c Sheet guru tidak ditemukan.';
+  var data = sheet.getDataRange().getValues();
+  var id = idGuru.toString().trim();
+  var count = 0;
+  for (var i = data.length - 1; i >= 1; i--) {
+    if ((data[i][0]||'').toString().trim() === id) { sheet.deleteRow(i + 1); count++; }
+  }
+  invalidateGuruCache();
+  return '\u2705 Guru dihapus (' + count + ' mata pelajaran).';
+}

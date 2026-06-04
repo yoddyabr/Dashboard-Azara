@@ -67,10 +67,18 @@ function populateTingkatSelect(elId) {
   el.innerHTML = '<option value="">-- Pilih Tingkat --</option>' + list.map(t => `<option value="${t}">${t}</option>`).join('');
 }
 
-// Helper: rombel → tingkat (fallback ke rombel itu sendiri)
+// Helper: rombel → tingkat. Robust untuk berbagai format.
 function getTingkatFromRombel(rombel) {
   if (!rombel) return '';
-  return rombelToTingkat[rombel.toLowerCase()] || rombel;
+  let s = rombel.toString().trim();
+  // 1. Lookup ke Data Kelas (paling akurat)
+  let mapped = rombelToTingkat[s.toLowerCase()];
+  if (mapped) return mapped.toString();
+  // 2. Fallback: ekstrak angka tingkat dari nama (10A → 10, "SMA 10" → 10, "SD 1" → 1)
+  let m = s.match(/\d+/);
+  if (m) return m[0];
+  // 3. Terakhir: kembalikan apa adanya
+  return s;
 }
 
 // Update info "Tingkat: X · Jenjang: Y" di bawah field rombel di form Siswa
@@ -205,6 +213,7 @@ function switchView(viewName) {
   if (viewName === 'data-ruangan' && masterDataLoaded) { renderTabelRuanganMaster(); }
   if (viewName === 'data-kelas' && masterDataLoaded) { renderTabelKelas(); }
   if (viewName === 'rekap-honor') { initRekapHonor(); }
+  if (viewName === 'manajemen-akses') { renderTabelAkses(); }
   if (viewName === 'absensi') {
     if (typeof rawSchedule === 'undefined' || rawSchedule.length === 0) {
       // Schedule belum di-fetch — trigger fetch via switchView ke schedule? Lebih simpel: panggil fetchScheduleData
@@ -668,6 +677,12 @@ function generatePeriodeCheckboxes() {
                  background:#f0fdf4;color:#15803d;border:1.5px dashed #22c55e;font-size:12px;font-weight:700;transition:all .15s;user-select:none;">
       <i class="fas fa-money-check-alt me-1"></i>Biaya Registrasi
     </span>
+    <input type="checkbox" class="chk-periode" value="Registrasi Ulang" id="chk-registrasi-ulang" style="position:absolute;left:-9999px;">
+    <span class="periode-pill" data-target="chk-registrasi-ulang" onclick="togglePeriodePill(this,'amber')" data-on="false"
+          style="display:inline-block;padding:6px 14px;border-radius:20px;cursor:pointer;margin-right:6px;margin-bottom:8px;
+                 background:#fff7ed;color:#c2410c;border:1.5px dashed #f97316;font-size:12px;font-weight:700;transition:all .15s;user-select:none;">
+      <i class="fas fa-redo me-1"></i>Registrasi Ulang
+    </span>
     <div class="w-100 mb-1"></div>`;
 
   let tahunMulai = Math.min(2026, tahunSekarang);
@@ -683,6 +698,20 @@ function generatePeriodeCheckboxes() {
     });
   }
   document.getElementById('periodeCheckboxContainer').innerHTML = html;
+  populatePeriodeDatalist();
+}
+
+// Isi datalist untuk field Periode (Edit Mode) — opsi sama persis dengan pills input baru
+function populatePeriodeDatalist() {
+  let dl = document.getElementById('pSinglePeriodeOptions');
+  if (!dl) return;
+  let tahunSekarang = new Date().getFullYear();
+  let tahunMulai = Math.min(2026, tahunSekarang);
+  let opts = '<option value="Biaya Registrasi"></option><option value="Registrasi Ulang"></option>';
+  for (let t = tahunMulai; t <= tahunSekarang + 1; t++) {
+    namaBulanArr.forEach(b => { opts += `<option value="${b} ${t}"></option>`; });
+  }
+  dl.innerHTML = opts;
 }
 
 // Toggle periode pill dengan dua skema warna: blue (default) dan green (registrasi)
@@ -694,6 +723,11 @@ function togglePeriodePill(spanEl, scheme) {
     spanEl.style.background  = cb.checked ? '#22c55e' : '#f0fdf4';
     spanEl.style.color       = cb.checked ? '#fff'    : '#15803d';
     spanEl.style.borderColor = '#22c55e';
+    spanEl.style.borderStyle = cb.checked ? 'solid' : 'dashed';
+  } else if (scheme === 'amber') {
+    spanEl.style.background  = cb.checked ? '#f97316' : '#fff7ed';
+    spanEl.style.color       = cb.checked ? '#fff'    : '#c2410c';
+    spanEl.style.borderColor = '#f97316';
     spanEl.style.borderStyle = cb.checked ? 'solid' : 'dashed';
   } else {
     spanEl.style.background  = cb.checked ? '#3b82f6' : '#f8fafc';
@@ -763,6 +797,7 @@ function siapkanEditPembayaran(rowIndex) {
   document.getElementById('wrapperSearchSiswa').classList.add('d-none');
   document.getElementById('wrapperMultiPeriode').classList.add('d-none');
   document.getElementById('wrapperSinglePeriode').classList.remove('d-none');
+  populatePeriodeDatalist();
   document.getElementById('pSinglePeriode').value = p.periode;
   document.getElementById('txtJudulFormBayar').innerText = `Edit Transaksi ${p.id} (Row ${p.rowIndex})`;
   document.getElementById('btnSimpanBayar').innerText = "Update Transaksi";
@@ -920,8 +955,12 @@ const ROOM_COLORS = [
   { bg:'#fff3e0', border:'#ff9800', text:'#e65100' },
 ];
 
+const ONLINE_COLOR = { bg:'#1e293b', border:'#a78bfa', text:'#ffffff' }; // block gelap khusus sesi Online (beda total dari ruang fisik)
+
 function getRoomColor(room) {
   if (!room) return ROOM_COLORS[0];
+  // Ruangan "Online" selalu pakai warna khusus (violet), biar beda jelas dari ruang fisik
+  if (room.toString().trim().toLowerCase() === 'online') return ONLINE_COLOR;
   if (!roomColorMap[room]) {
     roomColorMap[room] = ROOM_COLORS[roomColorIdx++ % ROOM_COLORS.length];
   }
@@ -1838,6 +1877,10 @@ function eksekusiNaikKelas() {
       setTombolLoading('btnEksekusiNaikKelas', false, '', '<i class="fas fa-graduation-cap me-2"></i>Eksekusi Naik Kelas', 'btn btn-primary fw-bold px-4');
       bsModalNaikKelas.hide();
       tampilkanToast(`🎓 Selesai! ${result.countNaik} siswa naik kelas, ${result.countLulus} siswa lulus.`, 'success');
+      // Data Kelas ikut berubah (di-reset ke 1 rombel/tingkat) → reload master juga
+      masterDataLoaded = false;
+      fetchMasterData();
+      if (typeof renderTabelKelas === 'function') { /* tabel kelas akan ke-render saat buka menu */ }
       fetchData("Memperbarui data...");
     })
     .withFailureHandler(function(err) {
@@ -2404,6 +2447,9 @@ function initModalGuru() {
 function bukaModalTambahGuru() {
   resetFormGuruKeDefault();
   generateKelasCheckboxesGuru([]);
+  // Pastikan datalist mapel terisi (kalau master data sudah load)
+  if (masterDataLoaded) updateMasterDataLists();
+  else fetchMasterData();
   initModalGuru();
   bsModalGuru.show();
 }
@@ -2426,6 +2472,46 @@ function onGuruModalSearchChange() {
   let match = rawGuru.find(g => g.id === idGuru);
   document.getElementById('gNamaKonfirmasi').value = match ? match.nama : '';
 }
+let currentEditGuruId = null;  // kalau set, submitGuru pakai mode update guru lengkap
+
+// Edit SELURUH guru (semua mapel) dalam 1 popup, seperti Tambah Guru
+function siapkanEditGuruById(idGuru) {
+  let rows = rawGuru.filter(x => (x.id||'') === idGuru);
+  if (rows.length === 0) return;
+  resetFormGuruKeDefault();
+  currentEditGuruId = idGuru;
+  document.getElementById('gModeSelector').classList.add('d-none');
+  document.getElementById('gNamaBaruWrapper').classList.remove('d-none');
+  document.getElementById('gNamaBaru').value = rows[0].nama;
+  document.getElementById('gRowIndexHidden').value = '';
+  // Build semua mapel group dari data guru ini
+  let groups = rows.map(r => ({
+    mapel: r.mapel,
+    kelasArr: (r.kelas || '').split(',').map(k => k.trim()).filter(k => k)
+  }));
+  generateGuruMapelGroups(groups);
+  document.getElementById('gAddMapelGroupWrapper').classList.remove('d-none'); // tetap bisa tambah mapel
+  document.getElementById('txtJudulFormGuru').innerText = 'Edit Data Guru (' + idGuru + ')';
+  document.getElementById('btnSimpanGuru').innerText = 'Update Data';
+  document.getElementById('btnSimpanGuru').className = 'btn btn-warning w-100 fw-bold py-2';
+  if (masterDataLoaded) updateMasterDataLists();
+  initModalGuru();
+  bsModalGuru.show();
+}
+
+function konfirmasiHapusGuruById(idGuru, nama) {
+  if (!confirm('Hapus guru "' + nama + '" beserta SEMUA mata pelajarannya?\n\nSemua jadwal/absensi yang mengacu ke guru ini tidak otomatis terhapus.')) return;
+  tampilkanLoading('Menghapus guru...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      tampilkanToast(res, res.includes('\u2705') ? 'success' : 'warning');
+      guruDataLoaded = false; fetchGuruData();
+    })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c ' + err.message, 'error'); })
+    .hapusGuruByID(idGuru);
+}
+
 function siapkanEditGuru(rowIndex) {
   let g = rawGuru.find(x => x.rowIndex === rowIndex);
   if (!g) return;
@@ -2446,6 +2532,7 @@ function siapkanEditGuru(rowIndex) {
 }
 function resetFormGuruKeDefault() {
   document.getElementById('formGuru').reset();
+  currentEditGuruId = null;
   document.getElementById('gRowIndexHidden').value = '';
   document.getElementById('gNamaKonfirmasi').value = '';
   document.getElementById('gModeSelector').classList.remove('d-none');
@@ -2474,14 +2561,25 @@ function submitGuru() {
   }
 
   let payload;
-  if (rowIndex) {
-    // Edit mode — single group
+  let fnCall;
+  if (currentEditGuruId) {
+    // Edit SELURUH guru (replace semua mapel)
+    payload = {
+      idGuru     : currentEditGuruId,
+      namaBaru   : document.getElementById('gNamaBaru').value.trim(),
+      mapelGroups: groups
+    };
+    if (!payload.namaBaru) { tampilkanToast('Nama guru wajib diisi!', 'warning'); return; }
+    fnCall = 'updateGuruLengkap';
+  } else if (rowIndex) {
+    // Edit mode — single group (legacy)
     payload = {
       rowIndex : rowIndex,
       namaBaru : document.getElementById('gNamaBaru').value.trim(),
       mapel    : groups[0].mapel,
       kelasArr : groups[0].kelasArr
     };
+    fnCall = 'simpanGuru';
   } else {
     // New / Existing mode — multi-group payload
     let mode = document.querySelector('input[name="gMode"]:checked').value;
@@ -2499,7 +2597,7 @@ function submitGuru() {
 
   setTombolLoading('btnSimpanGuru', true, 'Menyimpan...');
   tampilkanLoading('Menyimpan data guru...');
-  google.script.run
+  let runner = google.script.run
     .withSuccessHandler(res => {
       sembunyikanLoading();
       setTombolLoading('btnSimpanGuru', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
@@ -2511,8 +2609,9 @@ function submitGuru() {
       sembunyikanLoading();
       setTombolLoading('btnSimpanGuru', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
       tampilkanToast('\u274c Error: ' + err.message, 'error');
-    })
-    .simpanGuru(payload);
+    });
+  if (currentEditGuruId) runner.updateGuruLengkap(payload);
+  else runner.simpanGuru(payload);
 }
 
 // Helper: cek mapel ada di datalist gMapelOptions (validation per group)
@@ -2563,25 +2662,52 @@ function generateKelasPillsForGroup(checkedArr, groupIdx) {
   let container = document.getElementById('gKelasContainer-' + groupIdx);
   if (!container) return;
   checkedArr = checkedArr || [];
+  // Normalisasi checkedArr ke tingkat (supaya data lama berbasis rombel tetap kebaca tercentang)
+  let checkedTingkat = checkedArr.map(c => getTingkatFromRombel(c).toLowerCase());
   let html = '';
-  jenjangSistem.forEach(jenjang => {
+  getJenjangTingkatStruct().forEach(jenjang => {
     html += `<div class="mb-2">
       <span class="small fw-bold text-uppercase" style="color:#64748b;letter-spacing:0.8px;font-size:10px;">${jenjang.nama}</span>
       <div class="d-flex flex-wrap gap-1 mt-1">`;
-    jenjang.daftar.forEach(kelas => {
-      let id = `gChk-${groupIdx}-` + kelas.replace(/\s/g, '-');
-      let on = checkedArr.includes(kelas);
+    jenjang.daftar.forEach(tingkat => {
+      let id = `gChk-${groupIdx}-` + tingkat.toString().replace(/\s/g, '-');
+      let on = checkedTingkat.includes(tingkat.toLowerCase());
+      let label = 'Tingkat ' + tingkat;
       html += `
-        <input type="checkbox" class="chk-guru-kelas" data-group="${groupIdx}" value="${kelas}" id="${id}" ${on?'checked':''} style="position:absolute;left:-9999px;">
+        <input type="checkbox" class="chk-guru-kelas" data-group="${groupIdx}" value="${tingkat}" id="${id}" ${on?'checked':''} style="position:absolute;left:-9999px;">
         <span class="kelas-pill" data-target="${id}" onclick="toggleKelasPill(this)" data-on="${on}"
               style="display:inline-block;padding:4px 10px;border-radius:16px;cursor:pointer;
                      background:${on?'#3b82f6':'#f8fafc'};color:${on?'#fff':'#475569'};
                      border:1px solid ${on?'#3b82f6':'#cbd5e1'};font-size:11px;
-                     font-weight:600;transition:all .15s;user-select:none;">${kelas}</span>`;
+                     font-weight:600;transition:all .15s;user-select:none;">${label}</span>`;
     });
     html += `</div></div>`;
   });
   container.innerHTML = html;
+}
+
+// Struktur jenjang → daftar tingkat (distinct), untuk pills guru
+function getJenjangTingkatStruct() {
+  let map = {}, order = [];
+  if (rawKelas && rawKelas.length > 0) {
+    rawKelas.forEach(k => {
+      if (!map[k.jenjang]) { map[k.jenjang] = new Set(); order.push(k.jenjang); }
+      if (k.tingkat) map[k.jenjang].add(k.tingkat.toString());
+    });
+  } else {
+    jenjangSistem.forEach(j => {
+      if (!map[j.nama]) { map[j.nama] = new Set(); order.push(j.nama); }
+      j.daftar.forEach(rb => map[j.nama].add(getTingkatFromRombel(rb).toString()));
+    });
+  }
+  return order.map(j => ({
+    nama: j,
+    daftar: [...map[j]].sort((a,b) => {
+      let na = parseInt(a), nb = parseInt(b);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.localeCompare(b);
+    })
+  }));
 }
 
 // Tombol "+ Tambah Mata Pelajaran"
@@ -2990,6 +3116,13 @@ function initIsiAbsensi() {
   let currVal = sel.value;
   sel.innerHTML = opts;
   if (currVal) sel.value = currVal;
+
+  // Kunci ke guru sendiri kalau role=guru
+  if (window._guruLockId) {
+    sel.value = window._guruLockId;
+    sel.disabled = true;
+    loadJadwalGuru();
+  }
 }
 
 function loadJadwalGuru() {
@@ -3256,10 +3389,13 @@ function applyPillVisual(el, isOn) {
 
 // Cari guru yang mengajar kelas DAN mapel tertentu
 function getGuruByKelasMapel(kelas, mapel) {
+  // kelas dari schedule = rombel (10A) → derive ke tingkat (10).
+  // kelas guru juga dinormalisasi ke tingkat, supaya cocok lintas format (rombel/tingkat/lama).
+  let targetTingkat = kelas ? getTingkatFromRombel(kelas).toLowerCase() : '';
   return rawGuru.filter(g => {
-    let kelasList = (g.kelas || '').split(',').map(k => k.trim().toLowerCase());
+    let kelasList = (g.kelas || '').split(',').map(k => getTingkatFromRombel(k.trim()).toLowerCase());
     let mapelMatch = !mapel || (g.mapel || '').toLowerCase() === mapel.toLowerCase();
-    let kelasMatch = !kelas || kelasList.includes(kelas.toLowerCase());
+    let kelasMatch = !targetTingkat || kelasList.includes(targetTingkat);
     return mapelMatch && kelasMatch;
   });
 }
@@ -3366,6 +3502,23 @@ function applyFiltersGuru() {
   renderTabelGuru();
 }
 
+// Render badge kelas guru sebagai "Tingkat X" (normalisasi semua format, deteksi data korup)
+function renderKelasTingkatBadges(kelasStr) {
+  if (!kelasStr) return '<span class="text-muted small">-</span>';
+  let s = kelasStr.toString();
+  // Deteksi data korup (cell terlanjur jadi tanggal oleh Google Sheets)
+  if (/GMT|\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b|\b\d{4}\b.*\d{2}:\d{2}/.test(s)) {
+    return '<span class="badge bg-danger" title="Data tingkat rusak (jadi tanggal). Edit guru ini lalu Simpan ulang.">\u26a0 perlu diperbaiki</span>';
+  }
+  let seen = new Set(), tingkats = [];
+  s.split(',').map(k => k.trim()).filter(k => k).forEach(k => {
+    let t = getTingkatFromRombel(k);
+    if (t && !seen.has(t)) { seen.add(t); tingkats.push(t); }
+  });
+  if (tingkats.length === 0) return '<span class="text-muted small">-</span>';
+  return tingkats.map(t => `<span class="badge bg-light text-dark border me-1 mb-1">Tingkat ${t}</span>`).join('');
+}
+
 function renderTabelGuru() {
   let limitVal  = document.getElementById('limitGuru').value;
   let totalData = filteredGuruData.length;
@@ -3399,6 +3552,8 @@ function renderTabelGuru() {
   let html = '';
   order.forEach(id => {
     let rows = grouped[id];
+    let namaGuru = rows[0].nama;
+    let namaEsc = namaGuru.replace(/'/g, "\\'");
     rows.forEach((g, idx) => {
       html += `<tr>`;
       if (idx === 0) {
@@ -3406,16 +3561,16 @@ function renderTabelGuru() {
         html += `<td rowspan="${rows.length}" class="align-middle fw-bold">${g.nama}</td>`;
       }
       html += `<td class="align-middle">${g.mapel}</td>`;
-      let kelasBadges = g.kelas.split(',').map(k => k.trim()).filter(k => k)
-        .map(k => `<span class="badge bg-light text-dark border me-1 mb-1">${k}</span>`).join('');
-      html += `<td class="align-middle">${kelasBadges}</td>`;
-      let namaEsc = g.nama.replace(/'/g, "\\'");
-      html += `<td class="text-center align-middle">
-        <div class="d-flex gap-1 justify-content-center">
-          <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditGuru(${g.rowIndex})"><i class="fas fa-edit me-1"></i>Edit</button>
-          <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusGuru(${g.rowIndex},'${namaEsc} — ${g.mapel}')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
-        </div>
-      </td></tr>`;
+      html += `<td class="align-middle">${renderKelasTingkatBadges(g.kelas)}</td>`;
+      if (idx === 0) {
+        html += `<td rowspan="${rows.length}" class="text-center align-middle">
+          <div class="d-flex gap-1 justify-content-center">
+            <button class="btn btn-sm btn-outline-primary py-0" onclick="siapkanEditGuruById('${id}')"><i class="fas fa-edit me-1"></i>Edit</button>
+            <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusGuruById('${id}','${namaEsc}')"><i class="fas fa-trash-alt me-1"></i>Hapus</button>
+          </div>
+        </td>`;
+      }
+      html += `</tr>`;
     });
   });
   document.getElementById('tabelGuruBody').innerHTML = html ||
@@ -3492,7 +3647,243 @@ function parseJamRobust(val) {
 
 
 window.onload = function() {
-  fetchData();
-  fetchMasterData();
+  cekAksesLaluMulai();
 };
+
+// ==========================================
+// AKSES CONTROL
+// ==========================================
+let currentUser = null;
+
+function cekAksesLaluMulai() {
+  tampilkanLoading('Memeriksa akses...');
+  google.script.run
+    .withSuccessHandler(function(user) {
+      sembunyikanLoading();
+      currentUser = user;
+      if (!user || user.role === 'none' || !user.modulList || user.modulList.length === 0) {
+        tampilkanLockedScreen(user);
+        return;
+      }
+      applyAksesControl(user);
+      fetchData();
+      fetchMasterData();
+    })
+    .withFailureHandler(function(err) {
+      sembunyikanLoading();
+      tampilkanLockedScreen({ pesan: 'error', email: '', errMsg: err.message });
+    })
+    .getCurrentUserAkses();
+}
+
+function tampilkanLockedScreen(user) {
+  let scr = document.getElementById('lockedScreen');
+  let msg = document.getElementById('lockedScreenMsg');
+  let emailEl = document.getElementById('lockedScreenEmail');
+  if (user && user.pesan === 'no_email') {
+    msg.innerHTML = 'Sistem tidak bisa membaca akun Google kamu. Pastikan Web App di-deploy dengan setting <strong>"Execute as: User accessing the web app"</strong>, lalu buka ulang.';
+  } else if (user && user.pesan === 'error') {
+    msg.innerHTML = 'Terjadi error saat memeriksa akses: ' + (user.errMsg || '') + '. Coba lagi atau hubungi admin.';
+  } else if (user && user.status && user.status.toLowerCase() === 'nonaktif') {
+    msg.innerHTML = 'Akses kamu sedang <strong>dinonaktifkan</strong>. Hubungi management untuk diaktifkan kembali.';
+  } else {
+    msg.innerHTML = 'Email kamu belum terdaftar untuk mengakses dashboard ini. Hubungi management untuk diberikan akses.';
+  }
+  if (user && user.email) emailEl.innerText = 'Login sebagai: ' + user.email;
+  scr.style.display = 'flex';
+}
+
+function applyAksesControl(user) {
+  // Map modul → nav id
+  let navMap = {
+    'dashboard':'nav-dashboard','data-siswa':'nav-data-siswa','data-pembayaran':'nav-data-pembayaran',
+    'data-guru':'nav-data-guru','schedule':'nav-schedule','absensi':'nav-absensi',
+    'rekap-honor':'nav-rekap-honor','data-mapel':'nav-data-mapel','data-kelas':'nav-data-kelas',
+    'data-ruangan':'nav-data-ruangan','manajemen-akses':'nav-manajemen-akses'
+  };
+  let allowed = user.modulList || [];
+  // Sembunyikan semua nav dulu, lalu tampilkan yang diizinkan
+  Object.keys(navMap).forEach(modul => {
+    let el = document.getElementById(navMap[modul]);
+    if (!el) return;
+    if (allowed.includes(modul)) {
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+    }
+  });
+
+  // Info user di sidebar
+  let infoWrap = document.getElementById('sidebarUserInfo');
+  if (infoWrap) {
+    infoWrap.style.display = 'block';
+    let roleLabel = { management:'Management', staff:'Staff', guru:'Guru' }[user.role] || user.role;
+    document.getElementById('userInfoNama').innerText = user.nama || user.email;
+    document.getElementById('userInfoRole').innerText = roleLabel + (user.idGuru ? ' \u00b7 ' + user.idGuru : '');
+  }
+
+  // Pindah ke view pertama yang diizinkan (kalau dashboard ga boleh)
+  let firstView = allowed[0];
+  if (firstView) switchView(firstView);
+
+  // Khusus guru: kunci picker guru di Isi Absensi ke dirinya
+  if (user.role === 'guru' && user.idGuru) {
+    window._guruLockId = user.idGuru;
+  }
+}
+
+function bolehAkses(modul) {
+  if (!currentUser || !currentUser.modulList) return false;
+  return currentUser.modulList.includes(modul);
+}
+
+// ==========================================
+// CRUD MANAJEMEN AKSES
+// ==========================================
+let bsModalAkses = null;
+
+function renderTabelAkses() {
+  tampilkanLoading('Memuat data akses...');
+  google.script.run
+    .withSuccessHandler(list => {
+      sembunyikanLoading();
+      let html = '';
+      let roleBadge = {
+        management: '<span class="badge bg-primary">Management</span>',
+        staff: '<span class="badge bg-info text-dark">Staff</span>',
+        guru: '<span class="badge bg-success">Guru</span>'
+      };
+      list.forEach(a => {
+        let statusBadge = (a.status||'').toLowerCase() === 'aktif'
+          ? '<span class="badge bg-success">Aktif</span>'
+          : '<span class="badge bg-secondary">Nonaktif</span>';
+        html += `<tr>
+          <td class="small">${a.email}</td>
+          <td class="fw-bold">${a.nama || '-'}</td>
+          <td>${roleBadge[a.role] || a.role}</td>
+          <td class="small">${a.idGuru || '-'}</td>
+          <td class="text-center">${statusBadge}</td>
+          <td class="text-center">
+            <div class="d-flex gap-1 justify-content-center">
+              <button class="btn btn-sm btn-outline-primary py-0" onclick='siapkanEditAkses(${JSON.stringify(a).replace(/'/g,"&#39;")})'><i class="fas fa-edit"></i></button>
+              <button class="btn btn-sm btn-outline-danger py-0" onclick="konfirmasiHapusAkses(${a.rowIndex},'${a.email.replace(/'/g,"\\'")}')"><i class="fas fa-trash-alt"></i></button>
+            </div>
+          </td>
+        </tr>`;
+      });
+      document.getElementById('tabelAksesBody').innerHTML = html || '<tr><td colspan="6" class="text-center text-muted py-4">Belum ada data akses</td></tr>';
+    })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c ' + err.message, 'error'); })
+    .getDaftarAkses();
+}
+
+function initModalAkses() {
+  if (!bsModalAkses) bsModalAkses = new bootstrap.Modal(document.getElementById('modalAkses'));
+}
+function populateGuruDatalistAkses() {
+  let dl = document.getElementById('aGuruOptions');
+  if (!dl) return;
+  let seen = {}, html = '';
+  (rawGuru||[]).forEach(g => {
+    if (g.id && !seen[g.id]) { seen[g.id] = true; html += `<option value="${g.id}">${g.nama}</option>`; }
+  });
+  dl.innerHTML = html;
+}
+// Cek ID guru valid (ada di rawGuru)
+function isIDGuruValid(id) {
+  if (!id) return false;
+  return (rawGuru||[]).some(g => (g.id||'').toLowerCase() === id.toLowerCase());
+}
+function onAksesRoleChange() {
+  let role = document.getElementById('aRole').value;
+  let isGuru = (role === 'guru');
+  document.getElementById('aGuruWrap').classList.toggle('d-none', !isGuru);
+  if (isGuru) {
+    // Pastikan data guru ter-load lalu isi datalist (momen field muncul)
+    if (!guruDataLoaded || !rawGuru || rawGuru.length === 0) {
+      fetchGuruData(function(){ populateGuruDatalistAkses(); });
+    } else {
+      populateGuruDatalistAkses();
+    }
+  }
+}
+function bukaModalTambahAkses() {
+  resetFormAkses();
+  if (!guruDataLoaded) fetchGuruData(function(){ populateGuruDatalistAkses(); });
+  else populateGuruDatalistAkses();
+  initModalAkses();
+  bsModalAkses.show();
+}
+function siapkanEditAkses(a) {
+  resetFormAkses();
+  if (!guruDataLoaded) fetchGuruData(function(){ populateGuruDatalistAkses(); });
+  else populateGuruDatalistAkses();
+  document.getElementById('aRowIndexHidden').value = a.rowIndex;
+  document.getElementById('aEmail').value = a.email;
+  document.getElementById('aNama').value = a.nama || '';
+  document.getElementById('aRole').value = a.role || 'staff';
+  document.getElementById('aIDGuru').value = a.idGuru || '';
+  document.getElementById('aStatus').value = (a.status||'Aktif');
+  onAksesRoleChange();
+  document.getElementById('txtJudulFormAkses').innerText = 'Edit Akses';
+  document.getElementById('btnSimpanAkses').innerText = 'Update';
+  document.getElementById('btnSimpanAkses').className = 'btn btn-warning w-100 fw-bold py-2';
+  initModalAkses();
+  bsModalAkses.show();
+}
+function resetFormAkses() {
+  document.getElementById('formAkses').reset();
+  document.getElementById('aRowIndexHidden').value = '';
+  document.getElementById('txtJudulFormAkses').innerText = 'Tambah Akses';
+  document.getElementById('btnSimpanAkses').innerText = 'Simpan';
+  document.getElementById('btnSimpanAkses').className = 'btn btn-primary w-100 fw-bold py-2';
+  onAksesRoleChange();
+}
+function submitAkses() {
+  let payload = {
+    rowIndex: document.getElementById('aRowIndexHidden').value,
+    email   : document.getElementById('aEmail').value.trim(),
+    nama    : document.getElementById('aNama').value.trim(),
+    role    : document.getElementById('aRole').value,
+    idGuru  : document.getElementById('aIDGuru').value.trim(),
+    status  : document.getElementById('aStatus').value
+  };
+  if (!payload.email) { tampilkanToast('Email wajib diisi!', 'warning'); return; }
+  if (payload.role === 'guru') {
+    if (!payload.idGuru) {
+      if (!confirm('Role guru tanpa ID Guru — Isi Absensi tidak akan auto-filter. Lanjut?')) return;
+    } else if (!isIDGuruValid(payload.idGuru)) {
+      tampilkanToast('\u26a0\ufe0f ID Guru "' + payload.idGuru + '" tidak valid! Pilih dari daftar suggestion.', 'warning');
+      return;
+    }
+  }
+  setTombolLoading('btnSimpanAkses', true, 'Menyimpan...');
+  tampilkanLoading('Menyimpan akses...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanAkses', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
+      let tipe = res.includes('\u2705') ? 'success' : 'warning';
+      tampilkanToast(res, tipe);
+      if (tipe === 'success') { bsModalAkses.hide(); resetFormAkses(); renderTabelAkses(); }
+    })
+    .withFailureHandler(err => {
+      sembunyikanLoading();
+      setTombolLoading('btnSimpanAkses', false, '', 'Simpan', 'btn btn-primary w-100 fw-bold py-2');
+      tampilkanToast('\u274c ' + err.message, 'error');
+    })
+    .simpanAkses(payload);
+}
+function konfirmasiHapusAkses(rowIndex, email) {
+  if (!confirm('Hapus akses untuk "' + email + '"?')) return;
+  tampilkanLoading('Menghapus...');
+  google.script.run
+    .withSuccessHandler(res => {
+      sembunyikanLoading();
+      tampilkanToast(res, res.includes('\u2705') ? 'success' : 'warning');
+      renderTabelAkses();
+    })
+    .withFailureHandler(err => { sembunyikanLoading(); tampilkanToast('\u274c ' + err.message, 'error'); })
+    .hapusAkses(rowIndex);
+}
 </script>

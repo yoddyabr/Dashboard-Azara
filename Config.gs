@@ -10,5 +10,6 @@ const CONFIG = {
   SHEET_RUANGAN : "Data Ruangan",
   SHEET_KELAS   : "Data Kelas",
   SHEET_ABSENSI : "Data Absensi",
-  SHEET_HONOR_BAYAR : "Honor Pembayaran"
+  SHEET_HONOR_BAYAR : "Honor Pembayaran",
+  SHEET_AKSES : "Data Akses"
 };
