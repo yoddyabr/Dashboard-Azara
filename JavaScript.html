@@ -880,25 +880,93 @@ function konfirmasiHapusPembayaran(rowIndex, idSiswa, periode) {
 }
 
 // ==========================================
-// TUNGGAKAN
+// TUNGGAKAN (ALL-TIME)
 // ==========================================
-function getTunggakanList() {
-  let stringPeriodeIni = (namaBulanArr[new Date().getMonth()] + " " + new Date().getFullYear()).toLowerCase();
-  let sudahBayarId = new Set();
-  rawPayment.forEach(p => { if (p.periode && p.periode.toString().trim().toLowerCase() === stringPeriodeIni) sudahBayarId.add(p.id); });
-  return rawSiswa.filter(s => s.status === 'Aktif' && !sudahBayarId.has(s.id));
+// Parse periode "Januari 2026" -> {y:2026, m:0}. Non-bulanan (Biaya Registrasi,
+// Registrasi Ulang) atau tak terparse -> null.
+function _periodeToYM(periode) {
+  if (!periode) return null;
+  let str = periode.toString().trim().toLowerCase();
+  if (str === 'biaya registrasi' || str === 'registrasi ulang') return null;
+  let parts = str.split(/\s+/);
+  if (parts.length < 2) return null;
+  let m = mapBulanIndo[parts[0]];
+  let y = parseInt(parts[1]);
+  if (m === undefined || isNaN(y)) return null;
+  return { y: y, m: m };
 }
+function _ymKey(y, m) { return y * 12 + m; }                 // index bulan absolut
+function _ymLabel(key) { let y = Math.floor(key / 12), m = key % 12; return namaBulanArr[m] + ' ' + y; }
+
+// Daftar bulan BELUM dibayar tiap siswa aktif, dari pembayaran pertama s/d bulan ini.
+// - Bulanan    : 1 pembayaran = cover 1 bulan
+// - Semesteran : 1 pembayaran = cover 6 bulan (bulan periode + 5 berikutnya)
+function getTunggakanList() {
+  let now = new Date();
+  let nowKey = _ymKey(now.getFullYear(), now.getMonth());
+
+  let coveredByStudent = {};   // id -> Set(monthKey)
+  let firstKeyByStudent = {};  // id -> earliest covered monthKey
+
+  rawPayment.forEach(p => {
+    let ym = _periodeToYM(p.periode);
+    if (!ym) return;
+    let key = _ymKey(ym.y, ym.m);
+    let id = p.id;
+    if (!coveredByStudent[id]) coveredByStudent[id] = new Set();
+    let siswa = rawSiswa.find(s => s.id === id);
+    let span = (siswa && (siswa.tipe || '').toLowerCase().indexOf('semester') === 0) ? 6 : 1;
+    for (let i = 0; i < span; i++) coveredByStudent[id].add(key + i);
+    if (firstKeyByStudent[id] === undefined || key < firstKeyByStudent[id]) firstKeyByStudent[id] = key;
+  });
+
+  let hasil = [];
+  rawSiswa.forEach(s => {
+    if (s.status !== 'Aktif') return;
+    let covered = coveredByStudent[s.id] || new Set();
+    let startKey = (firstKeyByStudent[s.id] !== undefined) ? firstKeyByStudent[s.id] : nowKey;
+    let tertunggak = [];
+    for (let k = startKey; k <= nowKey; k++) {
+      if (!covered.has(k)) tertunggak.push(k);
+    }
+    if (tertunggak.length > 0) {
+      hasil.push({
+        id: s.id, nama: s.nama, kelas: s.kelas, tipe: s.tipe,
+        biaya: s.biaya || 0,
+        periodeList: tertunggak.map(_ymLabel),
+        jumlah: tertunggak.length,
+        estimasi: (s.biaya || 0) * tertunggak.length
+      });
+    }
+  });
+  hasil.sort((a, b) => b.jumlah - a.jumlah);   // paling banyak nunggak di atas
+  return hasil;
+}
+
 function hitungTunggakanBadge() {
   document.getElementById('badgeTunggakan').innerText = getTunggakanList().length;
 }
+
 function renderTunggakan() {
   let list = getTunggakanList();
-  let bTarget = namaBulanArr[new Date().getMonth()] + " " + new Date().getFullYear();
   let html = '';
   list.forEach(s => {
-    html += `<tr><td><span class="siswa-id-badge">${s.id}</span></td><td><strong class="text-dark">${s.nama}</strong></td><td>${s.kelas}</td><td>${s.tipe}</td><td><span class="badge bg-warning text-dark">Belum Lunas ${bTarget}</span></td></tr>`;
+    let pills = s.periodeList.map(p => `<span class="badge bg-warning text-dark me-1 mb-1">${p}</span>`).join('');
+    let isSemester = (s.tipe || '').toLowerCase().indexOf('semester') === 0;
+    let estimasiHtml = isSemester
+      ? ''
+      : `<span class="text-muted small d-block mt-1">\u00b1Rp ${s.estimasi.toLocaleString('id-ID')}</span>`;
+    html += `<tr>
+      <td><span class="siswa-id-badge">${s.id}</span></td>
+      <td><strong class="text-dark">${s.nama}</strong></td>
+      <td>${s.kelas}</td>
+      <td>${s.tipe}</td>
+      <td>${pills}</td>
+      <td><span class="badge bg-danger">${s.jumlah} bln</span>${estimasiHtml}</td>
+    </tr>`;
   });
-  document.getElementById('tabelTunggakanBody').innerHTML = html || `<tr><td colspan="5" class="text-center text-success fw-bold py-3">🎉 Semua siswa aktif sudah lunas untuk ${bTarget}!</td></tr>`;
+  document.getElementById('tabelTunggakanBody').innerHTML = html ||
+    `<tr><td colspan="6" class="text-center text-success fw-bold py-3">🎉 Semua siswa aktif sudah lunas (semua periode)!</td></tr>`;
 }
 
 // ==========================================
