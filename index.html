@@ -96,43 +96,131 @@
   <!-- MAIN CONTENT -->
   <div class="main-content">
 
-    <!-- ===== SECTION: DASHBOARD ===== -->
+    <!-- ===== SECTION: DASHBOARD (CEO COCKPIT) ===== -->
     <div id="section-dashboard" class="view-section active-section">
-      <div class="mb-4">
-        <h3 class="fw-bold m-0" style="color: #0f172a; letter-spacing: -0.75px;">Dashboard Overview</h3>
+
+      <!-- Stub tersembunyi: kompatibilitas dgn JS lama (processDashboard / fetchData) -->
+      <div style="display:none !important;" aria-hidden="true">
+        <span id="txtTotalOmset"></span><span id="txtTotalSiswaAktif"></span>
+        <div id="kelasJenjangContainer"></div>
+        <input type="month" id="dashStart"><input type="month" id="dashEnd">
+        <canvas id="chartTren"></canvas>
       </div>
-      <div class="row g-3">
-        <div class="col-md-4 d-flex flex-column gap-3">
-          <div class="bento-card metric-pemasukan flex-fill d-flex flex-column justify-content-center">
-            <h6 class="small text-muted fw-bold text-uppercase mb-2" style="letter-spacing: 0.8px; font-size: 11px;">Total Pemasukan</h6>
-            <h2 id="txtTotalOmset" class="text-omset-green m-0">Rp 0</h2>
+
+      <div id="dovRoot">
+        <style>
+          #dovRoot{--dov-p:#4F46E5;--dov-s:#22C55E;--dov-w:#F59E0B;--dov-d:#EF4444;--dov-muted:#64748B;}
+          #dovRoot .dov-card{background:#fff;border:1px solid #eef0f4;border-radius:18px;box-shadow:0 1px 3px rgba(16,24,40,.06);}
+          #dovRoot .dov-kpi{padding:16px 18px;}
+          #dovRoot .dov-kpi .lbl{font-size:12px;font-weight:600;color:var(--dov-muted);display:flex;gap:8px;align-items:center;}
+          #dovRoot .dov-kpi .val{font-size:22px;font-weight:800;letter-spacing:-.5px;margin-top:6px;color:#0f172a;}
+          #dovRoot .dov-kpi .sub{font-size:12px;margin-top:4px;}
+          #dovRoot .ico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:15px;flex-shrink:0;}
+          #dovRoot .up{color:var(--dov-s);} #dovRoot .down{color:var(--dov-d);}
+          #dovRoot .sect-title{font-weight:700;font-size:15px;letter-spacing:-.2px;color:#0f172a;}
+          #dovRoot .dov-bar{height:8px;border-radius:999px;background:#eef0f4;overflow:hidden;}
+          #dovRoot .dov-bar>span{display:block;height:100%;border-radius:999px;}
+          #dovRoot .gauge{width:150px;height:150px;border-radius:50%;display:grid;place-items:center;margin:auto;}
+          #dovRoot .gauge .inner{width:112px;height:112px;border-radius:50%;background:#fff;display:grid;place-items:center;text-align:center;}
+          #dovRoot .pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;display:inline-block;}
+          #dovRoot .qbtn{border:1px solid #eef0f4;border-radius:14px;padding:14px;text-align:center;cursor:pointer;font-weight:600;font-size:13px;transition:.15s;background:#fff;color:#0f172a;}
+          #dovRoot .qbtn:hover{border-color:var(--dov-p);color:var(--dov-p);transform:translateY(-2px);}
+          #dovRoot .dov-table{width:100%;font-size:13px;}
+          #dovRoot .dov-table th{font-size:11px;text-transform:uppercase;color:var(--dov-muted);text-align:left;padding:6px 4px;font-weight:700;}
+          #dovRoot .dov-table td{padding:8px 4px;border-top:1px solid #f1f3f7;}
+          #dovRoot .notif{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;margin-bottom:8px;font-size:13px;}
+          #dovRoot .notif.danger{background:rgba(239,68,68,.08);color:#b91c1c;}
+          #dovRoot .notif.warning{background:rgba(245,158,11,.1);color:#b45309;}
+          #dovRoot .notif.info{background:rgba(79,70,229,.08);color:#4338ca;}
+          #dovRoot .notif.success{background:rgba(34,197,94,.1);color:#15803d;}
+        </style>
+
+        <!-- header -->
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+          <div>
+            <h3 class="fw-bold mb-0" style="color:#0f172a;letter-spacing:-0.75px;">Business Overview</h3>
+            <small class="text-muted" id="dovGenerated">Memuat…</small>
           </div>
-          <div class="bento-card flex-fill d-flex flex-column justify-content-center">
-            <h6 class="small text-muted fw-bold text-uppercase mb-2" style="letter-spacing: 0.8px; font-size: 11px;">Total Siswa Aktif</h6>
-            <h2 id="txtTotalSiswaAktif" class="text-student-blue m-0">0 Siswa</h2>
-          </div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadDashboardOverview(true)" style="border-radius:8px;"><i class="fas fa-rotate me-1"></i>Refresh</button>
         </div>
-        <div class="col-md-8">
-          <div class="bento-card h-100 d-flex flex-column justify-content-center">
-            <h6 class="fw-bold mb-4 small text-muted text-uppercase" style="letter-spacing: 0.8px; font-size: 11px;">Jumlah Siswa Aktif per Jenjang Kelas</h6>
-            <div id="kelasJenjangContainer" class="w-100"></div>
+
+        <!-- SECTION 1: EXECUTIVE KPI -->
+        <div class="row g-3" id="dovKpi"></div>
+
+        <!-- SECTION 2 + 3: HEALTH + REVENUE -->
+        <div class="row g-3 mt-1">
+          <div class="col-lg-3">
+            <div class="dov-card p-3 h-100 text-center">
+              <div class="sect-title mb-2 text-start">Business Health</div>
+              <div class="gauge" id="dovGauge"><div class="inner">
+                <div><div id="dovScore" style="font-size:30px;font-weight:800;color:#0f172a;">–</div>
+                <span class="pill" id="dovHealthPill">–</span></div>
+              </div></div>
+              <div id="dovHealthBreak" class="mt-3 text-start small"></div>
+            </div>
           </div>
+          <div class="col-lg-6"><div class="dov-card p-3 h-100">
+            <div class="sect-title mb-2">Revenue Trend (12 bln)</div>
+            <canvas id="dovChartTrend" height="150"></canvas>
+          </div></div>
+          <div class="col-lg-3"><div class="dov-card p-3 h-100">
+            <div class="sect-title mb-2">Revenue by Level</div>
+            <canvas id="dovChartLevel" height="160"></canvas>
+            <div class="text-center small text-muted mt-2">Forecast akhir bulan: <b id="dovForecast">–</b></div>
+          </div></div>
         </div>
-      </div>
-      <div class="row mt-2">
-        <div class="col-12">
-          <div class="bento-card">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
-              <h6 class="fw-bold m-0 small text-muted text-uppercase" style="letter-spacing: 0.8px; font-size: 11px;">Trending Realisasi Pembayaran</h6>
-              <div class="d-flex gap-2 align-items-center w-100 w-md-auto">
-                <input type="month" id="dashStart" class="form-control form-control-sm border shadow-sm" onchange="processDashboard()" style="padding: 6px 12px; border-radius: 8px; max-width: 140px; background: #ffffff;">
-                <span class="text-muted small fw-bold">to</span>
-                <input type="month" id="dashEnd" class="form-control form-control-sm border shadow-sm" onchange="processDashboard()" style="padding: 6px 12px; border-radius: 8px; max-width: 140px; background: #ffffff;">
-              </div>
-            </div>
-            <div style="position: relative; width: 100%; height: 280px;">
-              <canvas id="chartTren"></canvas>
-            </div>
+
+        <!-- SECTION 8 + 10: ACTION CENTER + NOTIFICATIONS -->
+        <div class="row g-3 mt-1">
+          <div class="col-lg-7"><div class="dov-card p-3 h-100">
+            <div class="sect-title mb-2"><i class="fas fa-bolt me-1 text-warning"></i>Today's Action Center</div>
+            <div class="row g-2" id="dovActions"></div>
+          </div></div>
+          <div class="col-lg-5"><div class="dov-card p-3 h-100">
+            <div class="sect-title mb-2"><i class="fas fa-bell me-1"></i>Notifications</div>
+            <div id="dovNotifs"></div>
+          </div></div>
+        </div>
+
+        <!-- SECTION 5: PAYMENT MONITORING -->
+        <div class="row g-3 mt-1">
+          <div class="col-lg-7"><div class="dov-card p-3 h-100">
+            <div class="sect-title mb-2">Overdue Students (Top 10)</div>
+            <div class="table-responsive"><table class="dov-table"><thead><tr><th>Nama</th><th>Kelas</th><th class="text-end">Tagihan</th><th class="text-end">Telat</th></tr></thead><tbody id="dovOverdue"></tbody></table></div>
+          </div></div>
+          <div class="col-lg-5"><div class="dov-card p-3 h-100">
+            <div class="sect-title mb-2">Payment Status</div>
+            <canvas id="dovChartStatus" height="160"></canvas>
+            <div class="text-center small text-muted mt-2">Collection rate: <b id="dovCollRate">–</b></div>
+          </div></div>
+        </div>
+
+        <!-- SECTION 4 + 6 + 7 -->
+        <div class="row g-3 mt-1">
+          <div class="col-lg-4"><div class="dov-card p-3 h-100">
+            <div class="sect-title mb-2"><i class="fas fa-user-shield me-1 text-danger"></i>Students at Risk</div>
+            <div id="dovAtRisk"></div>
+          </div></div>
+          <div class="col-lg-4"><div class="dov-card p-3 h-100">
+            <div class="sect-title mb-2">Teacher Workload</div>
+            <canvas id="dovChartWorkload" height="200"></canvas>
+          </div></div>
+          <div class="col-lg-4"><div class="dov-card p-3 h-100">
+            <div class="sect-title mb-2">Class Performance</div>
+            <div class="small text-muted mb-1">Most Popular</div><div id="dovPopular" class="mb-2"></div>
+            <div class="small text-muted mb-1">Underutilized</div><div id="dovUnder"></div>
+          </div></div>
+        </div>
+
+        <!-- SECTION 9: QUICK ACTIONS -->
+        <div class="dov-card p-3 mt-3 mb-2">
+          <div class="sect-title mb-2">Quick Actions</div>
+          <div class="row g-2">
+            <div class="col"><div class="qbtn" onclick="DOV_ACTIONS.addStudent()"><i class="fas fa-user-plus d-block mb-1"></i>Add Student</div></div>
+            <div class="col"><div class="qbtn" onclick="DOV_ACTIONS.recordPayment()"><i class="fas fa-money-bill d-block mb-1"></i>Record Payment</div></div>
+            <div class="col"><div class="qbtn" onclick="DOV_ACTIONS.addSchedule()"><i class="fas fa-calendar-plus d-block mb-1"></i>Add Schedule</div></div>
+            <div class="col"><div class="qbtn" onclick="DOV_ACTIONS.addTeacher()"><i class="fas fa-chalkboard-user d-block mb-1"></i>Add Teacher</div></div>
+            <div class="col"><div class="qbtn" onclick="DOV_ACTIONS.exportReport()"><i class="fas fa-file-export d-block mb-1"></i>Export Report</div></div>
           </div>
         </div>
       </div>
@@ -1229,5 +1317,158 @@
   </div>
 
   <?!= include('JavaScript'); ?>
+
+  <!-- ============================================================
+       DASHBOARD OVERVIEW (CEO COCKPIT) — LOGIC
+       Backend: getDashboardOverview() di DashboardService.gs
+  ============================================================ -->
+  <script>
+  // Quick Actions → fungsi asli Azara
+  const DOV_ACTIONS = {
+    addStudent:    function(){ switchViewMobile('data-siswa');      setTimeout(function(){ if(typeof bukaModalTambahSiswa==='function') bukaModalTambahSiswa(); },300); },
+    recordPayment: function(){ switchViewMobile('data-pembayaran');  setTimeout(function(){ if(typeof bukaModalInputBayar==='function') bukaModalInputBayar(); },300); },
+    addSchedule:   function(){ switchViewMobile('schedule');         setTimeout(function(){ if(typeof bukaModalTambahSchedule==='function') bukaModalTambahSchedule(); },300); },
+    addTeacher:    function(){ switchViewMobile('data-guru');        setTimeout(function(){ if(typeof bukaModalTambahGuru==='function') bukaModalTambahGuru(); },300); },
+    exportReport:  function(){ dovExportReport(); }
+  };
+
+  var _dovCharts = {};
+  var _dovLoaded = false;
+  function dovRp(n){ return 'Rp ' + (Number(n)||0).toLocaleString('id-ID'); }
+  function dovRpK(n){ n=Number(n)||0; return n>=1e9?'Rp '+(n/1e9).toFixed(1)+'M':n>=1e6?'Rp '+(n/1e6).toFixed(1)+'jt':n>=1e3?'Rp '+Math.round(n/1e3)+'rb':'Rp '+n; }
+  function dovEl(id){ return document.getElementById(id); }
+
+  function loadDashboardOverview(force){
+    if (typeof showLoading === 'function') { try{ showLoading(true); }catch(e){} }
+    google.script.run
+      .withSuccessHandler(function(d){
+        if (typeof hideLoading === 'function') { try{ hideLoading(); }catch(e){} }
+        dovRender(d);
+      })
+      .withFailureHandler(function(e){
+        if (typeof hideLoading === 'function') { try{ hideLoading(); }catch(e){} }
+        console.error('Dashboard error:', e);
+        if (typeof showToast === 'function') showToast('Gagal memuat dashboard: ' + (e && e.message), 'error');
+      })
+      .getDashboardOverview();
+  }
+
+  function dovRender(d){
+    if (!d) return;
+    dovEl('dovGenerated').textContent = 'Diperbarui ' + d.generatedAt;
+
+    var ex = d.exec;
+    function growthChip(v){ return '<span class="'+(v>=0?'up':'down')+'">'+(v>=0?'▲':'▼')+' '+Math.abs(v)+'%</span>'; }
+    dovEl('dovKpi').innerHTML = [
+      dovKpi('Revenue Bulan Ini', dovRp(ex.revenue.current), 'fa-sack-dollar', '#4F46E5', 'rgba(79,70,229,.1)',
+        'Target '+dovRpK(ex.revenue.target)+' • <b>'+ex.revenue.achievement+'%</b> &nbsp; '+growthChip(ex.revenue.growth)+' vs lalu'),
+      dovKpi('Active Students', ex.students.active, 'fa-user-graduate', '#22C55E', 'rgba(34,197,94,.1)',
+        '+'+ex.students.newThisMonth+' baru • dari '+ex.students.total+' total'),
+      dovKpi('Outstanding', dovRp(ex.outstanding.amount), 'fa-file-invoice-dollar', '#EF4444', 'rgba(239,68,68,.1)',
+        '<span class="down">'+ex.outstanding.overdueCount+' siswa</span> belum bayar'),
+      dovKpi('Attendance Rate', ex.attendance.rate+'%', 'fa-clipboard-check', '#06B6D4', 'rgba(6,182,212,.1)',
+        growthChip(ex.attendance.rate - ex.attendance.prevRate)+' vs bln lalu'),
+      dovKpi('Teacher Utilization', ex.teacher.utilization+'%', 'fa-chalkboard-user', '#F59E0B', 'rgba(245,158,11,.1)',
+        ex.teacher.totalHours+' jam • '+ex.teacher.count+' guru'),
+      dovKpi('Cash Hari Ini', dovRp(ex.cashToday), 'fa-cash-register', '#8B5CF6', 'rgba(139,92,246,.1)', 'Diterima hari ini')
+    ].join('');
+
+    var h = d.health, col = h.score>=75?'#22C55E':(h.score>=50?'#F59E0B':'#EF4444');
+    dovEl('dovScore').textContent = h.score;
+    dovEl('dovGauge').style.background = 'conic-gradient('+col+' '+(h.score*3.6)+'deg, #eef0f4 0deg)';
+    var pill = dovEl('dovHealthPill');
+    pill.textContent = (h.status==='Healthy'?'🟢 ':h.status==='Need Attention'?'🟡 ':'🔴 ') + h.status;
+    pill.style.background = col+'22'; pill.style.color = col;
+    var labels = {revenue:'Revenue',attendance:'Attendance',collection:'Collection',retention:'Retention',occupancy:'Occupancy'};
+    dovEl('dovHealthBreak').innerHTML = Object.keys(h.breakdown).map(function(k){
+      var v=h.breakdown[k], c=v>=75?'#22C55E':(v>=50?'#F59E0B':'#EF4444');
+      return '<div class="mb-2"><div class="d-flex justify-content-between"><span>'+labels[k]+'</span><b>'+v+'%</b></div>'
+        +'<div class="dov-bar"><span style="width:'+Math.min(100,v)+'%;background:'+c+'"></span></div></div>';
+    }).join('');
+
+    dovEl('dovForecast').textContent = dovRp(d.revenue.forecast);
+    dovChart('dovChartTrend','line',{labels:d.revenue.trend.labels,datasets:[{label:'Revenue',data:d.revenue.trend.data,borderColor:'#4F46E5',backgroundColor:'rgba(79,70,229,.12)',fill:true,tension:.35,pointRadius:2}]},dovLineOpts());
+    dovChart('dovChartLevel','doughnut',{labels:d.revenue.byLevel.map(function(x){return x.level;}),datasets:[{data:d.revenue.byLevel.map(function(x){return x.amount;}),backgroundColor:['#22C55E','#4F46E5','#F59E0B'],borderWidth:0}]},{plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},cutout:'60%'});
+
+    var a = d.actions;
+    dovEl('dovActions').innerHTML = [
+      dovActionCard('fa-calendar-day','#4F46E5','Kelas Hari Ini', a.classesToday.length,
+        a.classesToday.slice(0,4).map(function(c){return (c.jam||'')+' '+c.mapel+' ('+c.kelas+')';}).join('<br>') || 'Tidak ada kelas'),
+      dovActionCard('fa-user-xmark','#EF4444','Alpa Beruntun', a.consecutiveAbsence.length,
+        a.consecutiveAbsence.slice(0,4).map(function(s){return s.nama+' — '+s.streak+'x';}).join('<br>') || 'Aman'),
+      dovActionCard('fa-money-check','#F59E0B','Belum Bayar', a.overdueCount, a.overdueCount+' siswa perlu ditagih'),
+      dovActionCard('fa-graduation-cap','#8B5CF6','Calon Lulus', a.promotions.length,
+        a.promotions.slice(0,4).map(function(s){return s.nama;}).join('<br>') || 'Tidak ada')
+    ].join('');
+
+    dovEl('dovNotifs').innerHTML = d.notifications.length
+      ? d.notifications.map(function(n){return '<div class="notif '+n.level+'"><i class="fas '+n.icon+' mt-1"></i><div>'+n.text+'</div></div>';}).join('')
+      : '<div class="text-muted small text-center py-4">Tidak ada notifikasi 🎉</div>';
+
+    dovEl('dovCollRate').textContent = d.payment.collectionRate + '%';
+    dovEl('dovOverdue').innerHTML = d.payment.overdueTop.length
+      ? d.payment.overdueTop.map(function(s){return '<tr><td>'+s.nama+'</td><td class="text-muted">'+s.kelas+'</td><td class="text-end fw-semibold">'+dovRp(s.amount)+'</td><td class="text-end down">'+s.daysOverdue+' hr</td></tr>';}).join('')
+      : '<tr><td colspan="4" class="text-center text-muted py-3">Semua lunas 🎉</td></tr>';
+    var sd = d.payment.statusDist;
+    dovChart('dovChartStatus','doughnut',{labels:['Paid','Partial','Overdue'],datasets:[{data:[sd.paid,sd.partial,sd.overdue],backgroundColor:['#22C55E','#F59E0B','#EF4444'],borderWidth:0}]},{plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},cutout:'62%'});
+
+    dovEl('dovAtRisk').innerHTML = d.students.atRisk.length
+      ? d.students.atRisk.slice(0,6).map(function(s){return '<div class="d-flex justify-content-between align-items-center py-1"><div><div class="fw-semibold small">'+s.nama+'</div><div class="text-muted" style="font-size:11px">'+s.kelas+'</div></div><div class="text-end">'+s.reasons.map(function(r){return '<span class="pill" style="background:rgba(239,68,68,.1);color:#b91c1c;margin-left:4px">'+r+'</span>';}).join('')+'</div></div>';}).join('')
+      : '<div class="text-muted small text-center py-4">Tidak ada siswa berisiko 🎉</div>';
+
+    var wl = d.teacher.workload.slice(0,8);
+    dovChart('dovChartWorkload','bar',{labels:wl.map(function(t){return t.nama;}),datasets:[{label:'Jam',data:wl.map(function(t){return t.hours;}),backgroundColor:'#4F46E5',borderRadius:5}]},{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{display:false},ticks:{font:{size:10}}}}});
+
+    dovEl('dovPopular').innerHTML = d.classPerf.popular.map(function(c){return '<div class="d-flex justify-content-between small py-1"><span>'+c.kelas+'</span><b>'+c.count+' siswa</b></div>';}).join('') || '<span class="text-muted small">–</span>';
+    dovEl('dovUnder').innerHTML = d.classPerf.underutilized.length
+      ? d.classPerf.underutilized.slice(0,5).map(function(c){return '<div class="d-flex justify-content-between small py-1"><span>'+c.kelas+'</span><span class="down">'+c.count+'/'+c.target+'</span></div>';}).join('')
+      : '<span class="text-muted small">Semua kelas sehat</span>';
+  }
+
+  function dovKpi(lbl,val,icon,color,bg,sub){
+    return '<div class="col-6 col-lg-2"><div class="dov-card dov-kpi h-100">'
+      +'<div class="d-flex justify-content-between"><span class="lbl">'+lbl+'</span><span class="ico" style="background:'+bg+';color:'+color+'"><i class="fas '+icon+'"></i></span></div>'
+      +'<div class="val">'+val+'</div><div class="sub text-muted">'+sub+'</div></div></div>';
+  }
+  function dovActionCard(icon,color,title,count,detail){
+    return '<div class="col-6"><div class="dov-card p-2 h-100">'
+      +'<div class="d-flex align-items-center gap-2 mb-1"><span class="ico" style="background:'+color+'1a;color:'+color+'"><i class="fas '+icon+'"></i></span>'
+      +'<div><div style="font-size:11px;color:#64748b;font-weight:600">'+title+'</div><div style="font-size:18px;font-weight:800;color:#0f172a;">'+count+'</div></div></div>'
+      +'<div class="text-muted" style="font-size:11px;line-height:1.4">'+detail+'</div></div></div>';
+  }
+  function dovChart(id,type,data,opts){
+    var ctx = dovEl(id); if(!ctx || typeof Chart==='undefined') return;
+    if(_dovCharts[id]) _dovCharts[id].destroy();
+    _dovCharts[id] = new Chart(ctx,{type:type,data:data,options:Object.assign({responsive:true,maintainAspectRatio:true},opts||{})});
+  }
+  function dovLineOpts(){
+    return {plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{ticks:{callback:function(v){return 'Rp '+(v/1e6).toFixed(0)+'jt';},font:{size:10}}}}};
+  }
+  function dovExportReport(){
+    var root = dovEl('dovRoot'); if(!root) return;
+    var w = window.open('','_blank');
+    w.document.write('<html><head><title>Azara Business Report</title>'
+      +'<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">'
+      +'<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">'
+      +'</head><body class="p-4"><h3>Azara — Business Overview</h3>'+root.innerHTML
+      +'<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},600);}</scr'+'ipt></body></html>');
+    w.document.close();
+  }
+
+  // Auto-load saat tab Dashboard aktif (tanpa mengubah switchViewMobile)
+  (function(){
+    function initDov(){
+      var sec = document.getElementById('section-dashboard');
+      if(!sec) return;
+      var obs = new MutationObserver(function(){
+        if(sec.classList.contains('active-section')) loadDashboardOverview();
+      });
+      obs.observe(sec, {attributes:true, attributeFilter:['class']});
+      if(sec.classList.contains('active-section')) setTimeout(loadDashboardOverview, 500);
+    }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initDov);
+    else initDov();
+  })();
+  </script>
 </body>
 </html>
